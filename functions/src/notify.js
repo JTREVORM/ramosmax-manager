@@ -30,6 +30,13 @@ const TEXT = {
   [NotificationType.lossRecoveryScheduled]: ['Recovery scheduled', 'A recovery from your pay has been scheduled. Open RamosMAX for details.'],
   [NotificationType.deductionAwaitingApproval]: ['Deduction to approve', 'A salary deduction is waiting for approval. Open RamosMAX for details.'],
   [NotificationType.deductionApplied]: ['Deduction applied', 'A deduction was applied to your pay. Open RamosMAX to see your payslip.'],
+  // Phase 8: generic on purpose - never a name or an amount.
+  [NotificationType.afterHoursAuthorized]: ['After-hours work authorised', 'You have been authorised for after-hours work. Open RamosMAX for the times.'],
+  [NotificationType.afterHoursExpiring]: ['After-hours ending soon', 'Your after-hours authorisation ends within 30 minutes. Close your session and hand over cash.'],
+  [NotificationType.cashHandoverPending]: ['Cash handover pending', 'An after-hours session has closed and its cash is waiting to be handed over.'],
+  [NotificationType.cashHandoverSubmitted]: ['Cash handover submitted', 'A cash handover is waiting to be counted and received. Open RamosMAX to receive it.'],
+  [NotificationType.cashDiscrepancyDetected]: ['Cash discrepancy', 'A cash handover did not match the expected amount. Open RamosMAX to review it.'],
+  [NotificationType.cashDiscrepancyResolved]: ['Cash discrepancy resolved', 'A cash handover discrepancy has been resolved. Open RamosMAX for details.'],
   // Phase 7: generic on purpose - never a shareholder name, share count or amount.
   [NotificationType.shareTransactionPending]: ['Share transaction to approve', 'A share transaction is waiting for approval. Open RamosMAX to review it.'],
   [NotificationType.shareTransactionCompleted]: ['Share transaction completed', 'A share transaction you requested has been decided. Open RamosMAX for details.'],

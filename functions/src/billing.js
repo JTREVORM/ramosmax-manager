@@ -28,6 +28,10 @@ import { ORDERS } from './jobs.js';
 import { REWARDS, TRANSACTIONS, pointsForItems, readLoyaltyState } from './loyalty.js';
 import { NotificationType, notifySafely, requireObject } from './user_admin.js';
 import { openLedger, postCustomerPayment, postReversal, readTransaction, resolvePaymentAccount } from './finance.js';
+import {
+  afterHoursTags, countOnSession, readAfterHoursContext, readReversalCustody, recordPaymentCustody, recordReversalCustody,
+  requireAfterHoursPaymentAllowed,
+} from './after_hours.js';
 
 export const INVOICES = 'invoices';
 export const PAYMENTS = 'payments';
@@ -113,6 +117,8 @@ export async function createInvoice(deps, callerUid, rawData, now = Date.now()) 
 
   return db.runTransaction(async (tx) => {
     const actor = await freshActor(tx, db, callerUid, now, 'invoices.create');
+    // Phase 8: an invoice raised in a live after-hours session is marked as such.
+    const afterHours = await readAfterHoursContext(tx, db, actor.uid, now);
     const intakeRef = db.collection(INTAKES).doc(intakeId);
     const intakeSnap = await tx.get(intakeRef);
     if (!intakeSnap.exists) throw notFound('That job could not be found.');
@@ -182,10 +188,12 @@ export async function createInvoice(deps, callerUid, rawData, now = Date.now()) 
       createdByName: actor.data.fullName ?? null,
       updatedAt: stamp(),
       updatedBy: actor.uid,
+      ...afterHoursTags(afterHours),
     };
     Object.assign(invoice, withTotals(invoice, {}));
     number.commit();
     tx.set(ref, invoice);
+    countOnSession(tx, afterHours, 'invoicesCreated');
     tx.update(intakeRef, { invoiceId: ref.id, invoiceNumber: number.value, updatedAt: stamp(), updatedBy: actor.uid });
     audit(tx, db, actor, 'sales', 'invoice.created', ref.id, {
       newValue: { invoiceNumber: number.value, jobNumber: intake.jobNumber, subtotalUgx, itemCount: items.length },
@@ -418,7 +426,9 @@ export async function recordPayment(deps, callerUid, rawData, now = Date.now()) 
   const p = requirePayment(data);
 
   const result = await db.runTransaction(async (tx) => {
-    const actor = await freshActor(tx, db, callerUid, now, 'payments.record');
+    // Phase 8: an after-hours worker collects with a temporary
+    // after_hours.cash.collect instead of payments.record (checked below).
+    const actor = await freshActor(tx, db, callerUid, now, 'payments.record', 'after_hours.cash.collect');
     // Idempotency: a retried request (lost response, double tap) returns the
     // first result instead of taking the money twice.
     const requestRef = uniqueRef(db, 'payment_request', p.requestId);
@@ -443,6 +453,12 @@ export async function recordPayment(deps, callerUid, rawData, now = Date.now()) 
     // transaction - if the posting fails, the payment is not recorded either.
     const accountId = await resolvePaymentAccount(tx, db, p.method, p.accountId);
     const ledger = await openLedger(tx, db, [accountId], now);
+    // Phase 8: inside an open after-hours session the authorisation must be in
+    // force and the method allowed after hours; the payment is tagged and the
+    // cash the worker holds is tracked. Nothing else about the payment changes.
+    const afterHours = await readAfterHoursContext(tx, db, actor.uid, now);
+    const custody = await requireAfterHoursPaymentAllowed(tx, db, actor, afterHours, p.method, now);
+    const tags = afterHoursTags(afterHours);
 
     // --- writes ---
     const at = Timestamp.fromMillis(now);
@@ -452,6 +468,7 @@ export async function recordPayment(deps, callerUid, rawData, now = Date.now()) 
       accountId, method: p.method, actor, amountUgx: p.amount,
       payment: { paymentId: paymentRef.id, invoiceId: ref.id, invoiceNumber: invoice.invoiceNumber, numberPlate: invoice.numberPlate,
         receiptNumber: receiptNumber.value, reference: p.reference },
+      extra: tags.isAfterHours ? tags : {},
     });
     const earned = earn ? earn.write(actor, ref.id) : null;
     const changes = withTotals(invoice, {
@@ -488,6 +505,7 @@ export async function recordPayment(deps, callerUid, rawData, now = Date.now()) 
       receivedBy: actor.uid,
       receivedByName: actor.data.fullName ?? null,
       receivedAt: at,
+      ...tags,
       createdAt: stamp(),
     };
     const receipt = {
@@ -520,6 +538,7 @@ export async function recordPayment(deps, callerUid, rawData, now = Date.now()) 
       loyaltyPointsBalance: earn ? earn.state.balance : null,
       status: 'issued',
       issuedAt: at,
+      ...tags,
       createdAt: stamp(),
     };
     const out = {
@@ -539,6 +558,7 @@ export async function recordPayment(deps, callerUid, rawData, now = Date.now()) 
     tx.set(receiptRef, receipt);
     tx.update(ref, { ...changes, updatedAt: stamp(), updatedBy: actor.uid });
     tx.set(requestRef, { kind: 'payment_request', invoiceId: ref.id, recordedBy: actor.uid, result: out, createdAt: stamp() });
+    if (custody) recordPaymentCustody(tx, db, afterHours, custody, actor, payment);
     audit(tx, db, actor, 'sales', 'payment.recorded', paymentRef.id, {
       newValue: {
         invoiceNumber: invoice.invoiceNumber, amountUgx: p.amount, method: p.method,
@@ -573,6 +593,8 @@ export async function reversePayment(deps, callerUid, rawData, now = Date.now())
     // Payments recorded before Phase 5 have no ledger entry and move nothing.
     const posted = payment.financialTransactionId ? await readTransaction(tx, db, payment.financialTransactionId) : null;
     const ledger = posted ? await openLedger(tx, db, [posted.data.destinationAccountId], now) : null;
+    // Phase 8: an after-hours payment's reversal is recorded against its session.
+    const custody = await readReversalCustody(tx, db, payment);
 
     // --- writes ---
     const reversal = posted ? postReversal(tx, ledger, posted, actor, `Payment ${payment.receiptNumber} reversed: ${reason}`) : null;
@@ -589,6 +611,7 @@ export async function reversePayment(deps, callerUid, rawData, now = Date.now())
       reversalTransactionId: reversal?.transactionId ?? null, reversalTransactionNumber: reversal?.transactionNumber ?? null,
     });
     tx.update(db.collection(RECEIPTS).doc(payment.receiptId), { status: 'reversed', reversedAt: at, reversalReason: reason });
+    recordReversalCustody(tx, db, custody, actor, { ...payment, paymentId }, reason);
     tx.update(ref, { ...changes, updatedAt: stamp(), updatedBy: actor.uid });
     audit(tx, db, actor, 'sales', 'payment.reversed', paymentId, {
       previousValue: { status: 'completed', invoiceOutstandingUgx: invoice.outstandingUgx },

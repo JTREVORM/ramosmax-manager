@@ -100,6 +100,20 @@ configurable `maxDeductionPercentOfGross` (PAYROLL.md), and net pay can never be
 
 Workers see their own deductions and decided incidents in **My pay**.
 
+## Incidents from cash handovers (Phase 8)
+
+When a cash-handover shortage is resolved with **Report the shortage as a loss incident**
+(`resolveCashDiscrepancy({recoverFromWorker: true})`, which needs `losses.create`), a `worker_related_loss` incident is
+created in the same transaction. It is created in status `reported`, with `sourceType: 'cash_discrepancy'`,
+`sourceId` and `sourceNumber` (`RMX-AHD-…`). From there it follows the normal flow above:
+
+- review;
+- approval;
+- recovery scheduling;
+- deduction only through a paid payroll.
+
+Nothing is deducted automatically. See CASH_HANDOVERS.md.
+
 ## Screens and routes
 
 | Route | Screen |

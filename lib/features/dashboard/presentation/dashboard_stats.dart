@@ -24,6 +24,8 @@ import '../../operations/application/operations_providers.dart';
 import '../../payroll/application/workforce_providers.dart';
 import '../../shareholders/application/shareholders_providers.dart';
 import '../../../models/shareholding.dart';
+import '../../../models/after_hours.dart';
+import '../../after_hours/application/after_hours_providers.dart';
 
 /// Live figures for the signed-in role, each from data the user may read.
 /// Nothing is shown for data the user has no permission to see.
@@ -108,6 +110,9 @@ class DashboardStats extends ConsumerWidget {
     // Phase 7: register-level shareholder figures (no contact or identity
     // data) and dividend status, only with the matching permission.
     tiles.addAll(_shareholderTiles(ref, can));
+    // Phase 8: after-hours work - the worker's own session and handovers, or
+    // the supervisors' queue, only with the matching permission.
+    tiles.addAll(_afterHoursTiles(ref, can));
     if (tiles.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(top: AppSpacing.md),
@@ -229,6 +234,38 @@ List<Widget> _shareholderTiles(WidgetRef ref, bool Function(Permission) can) {
     if (list != null) {
       final t = DividendTotals.of(list);
       tiles.add(_Stat(keyName: 'stat-dividends-unpaid', label: 'Dividends unpaid', value: t.outstanding.format(), route: AppRoutes.dividends));
+    }
+  }
+  return tiles;
+}
+
+List<Widget> _afterHoursTiles(WidgetRef ref, bool Function(Permission) can) {
+  final tiles = <Widget>[];
+  final view = can(Permission.afterHoursView);
+  if (can(Permission.afterHoursRequest) && !view) {
+    final open = ref.watch(myOpenSessionProvider);
+    if (open != null) {
+      tiles.add(_Stat(keyName: 'stat-my-expected-cash', label: 'Cash to hand over', value: open.expectedCash.format(), route: AppRoutes.myAfterHours));
+    }
+    final due = (ref.watch(myHandoversProvider).value ?? const <CashHandover>[]).where((h) => h.status == HandoverStatus.pending).length;
+    if (due > 0) tiles.add(_Stat(keyName: 'stat-my-handovers-due', label: 'Handovers to submit', value: '$due', route: AppRoutes.myAfterHours));
+  }
+  if (view || can(Permission.afterHoursApprove)) {
+    final open = ref.watch(afterHoursSessionsProvider(SessionStatus.open)).value;
+    if (open != null) tiles.add(_Stat(keyName: 'stat-ah-open', label: 'After-hours sessions open', value: '${open.length}', route: AppRoutes.afterHours));
+  }
+  if (view || can(Permission.cashHandoverApprove)) {
+    final list = ref.watch(handoversProvider(null)).value;
+    if (list != null) {
+      tiles.add(_Stat(
+          keyName: 'stat-ah-to-receive', label: 'Cash handovers to receive', value: '${list.where((h) => h.status.awaitingReceipt).length}', route: AppRoutes.afterHours));
+    }
+  }
+  if (view || can(Permission.afterHoursDiscrepancyReview)) {
+    final list = ref.watch(discrepanciesProvider(null)).value;
+    if (list != null) {
+      tiles.add(_Stat(
+          keyName: 'stat-ah-discrepancies', label: 'Open cash discrepancies', value: '${list.where((d) => d.status.isOpen).length}', route: AppRoutes.afterHours));
     }
   }
   return tiles;

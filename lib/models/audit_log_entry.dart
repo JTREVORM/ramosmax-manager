@@ -20,6 +20,7 @@ enum AuditModule {
   losses('losses'),
   loyalty('loyalty'),
   cashHandover('cash_handover'),
+  afterHours('after_hours'),
   inventory('inventory'),
   settings('settings');
 

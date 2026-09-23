@@ -114,7 +114,7 @@ void main() {
     test('each role sees its own menu', () {
       expect(RoleNavigation.modulesFor(testUser(role: UserRole.worker), now),
           [AppModule.dashboard, AppModule.myJobs, AppModule.vehicles, AppModule.services,
-            AppModule.attendance, AppModule.allowances, AppModule.myProfile]);
+            AppModule.attendance, AppModule.allowances, AppModule.myAfterHours, AppModule.myProfile]);
       expect(RoleNavigation.modulesFor(testUser(role: UserRole.cashier), now), contains(AppModule.invoices));
       expect(RoleNavigation.modulesFor(testUser(role: UserRole.cashier), now), isNot(contains(AppModule.payroll)));
       expect(RoleNavigation.modulesFor(testUser(role: UserRole.auditor), now), contains(AppModule.auditLogs));

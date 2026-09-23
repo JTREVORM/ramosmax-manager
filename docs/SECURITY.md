@@ -178,3 +178,36 @@ Firestore and Storage once all active clients support it.
   state, protects against duplicates with `requestId` or state checks, and writes its audit entry in the same
   transaction.
 - **Storage rules:** unchanged. Phase 7 stores no documents or photos.
+
+## Phase 8: after-hours operations and cash handovers
+
+- **Client access:** the rules block *After-hours operations and cash handovers* makes `after_hours_access`,
+  `after_hours_sessions`, `after_hours_cash`, `cash_handovers` and `cash_discrepancies` read-only to clients
+  (`allow write: if false`, the Administrator included).
+- **Worker isolation:** a worker reads only documents whose `staffUid` is their own uid (`ownWith('after_hours.request')`).
+  Wider reads need `after_hours.view`, or `after_hours.approve` / `cash_handover.approve` /
+  `after_hours.discrepancy.review` for the records each one acts on. Tested in `rules.test.js`:
+  - the read matrix;
+  - own-query isolation;
+  - no client writes;
+  - no self-granting through a profile edit;
+  - an expired grant opens nothing;
+  - a denial removes visibility;
+  - unauthenticated access is blocked.
+- **No escalation through after-hours access:**
+  - an authorisation can only carry the fixed allow-list (AFTER_HOURS.md), as temporary grants that expire on their
+    own;
+  - the authorisation-only permissions cannot be granted any other way;
+  - the target must be an active account the supervisor may administer, eligible (permanent `after_hours.request`),
+    and not the supervisor themselves.
+- **Server-authoritative figures:** the expected cash, differences, session totals and handover state are calculated
+  by the Cloud Functions from the payments themselves. Any `expectedCashUgx` or total sent by the app is ignored
+  (tested).
+- **Every mutation:** re-reads the caller and the authorisation window on the server clock inside a transaction,
+  writes its audit entry in the same transaction, and is idempotent by `requestId` (authorise, open, submit, receive,
+  resolve) or by state checks (close, cancel, review, revoke).
+- **Nothing deleted:** handovers and discrepancies are never deleted or cancelled; resolution adds fields and keeps
+  the original figures.
+- **Sensitive data:** audit values hold record numbers, amounts and statuses, never phone or identification numbers.
+  Notifications carry only a type and record ID.
+- **Storage rules:** unchanged. Phase 8 stores no documents or photos.

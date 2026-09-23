@@ -120,6 +120,7 @@ class PaymentTile extends StatelessWidget {
           ?p.reference,
           ?p.receiptNumber,
           if (p.receivedAt != null) DateTimeFormatter.dateTime(p.receivedAt!),
+          if (p.isAfterHours) 'After hours${p.afterHoursSessionNumber!.isEmpty ? '' : ' ${p.afterHoursSessionNumber}'}',
           if (p.reversed) 'Reversed${p.reversalReason == null ? '' : ': ${p.reversalReason}'}',
         ].join(' · ')),
         trailing: trailing,

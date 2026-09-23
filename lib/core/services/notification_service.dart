@@ -43,6 +43,15 @@ abstract final class NotificationTypes {
   static const String lossRecoveryScheduled = 'loss_recovery_scheduled';
   static const String deductionAwaitingApproval = 'deduction_awaiting_approval';
   static const String deductionApplied = 'deduction_applied';
+
+  // After-hours work and cash handovers (Phase 8) - sent by
+  // functions/src/after_hours.js. The worker receives only the ones about
+  // their own authorisation, handover or discrepancy.
+  static const String afterHoursAuthorized = 'after_hours_authorized';
+  static const String afterHoursExpiring = 'after_hours_expiring';
+  static const String cashHandoverSubmitted = 'cash_handover_submitted';
+  static const String cashDiscrepancyDetected = 'cash_discrepancy_detected';
+  static const String cashDiscrepancyResolved = 'cash_discrepancy_resolved';
 }
 
 /// Background handler — must be a top-level function. Phase 1 performs no

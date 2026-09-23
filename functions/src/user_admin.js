@@ -31,7 +31,7 @@ import {
   requireCanResetPassword,
   requireAllowedDenials, requirePhone, requireName, optionalEmail, optionalText, normalizeStaffId,
   formatStaffId, optionalSpecialization, requireReason, requirePermissionList,
-  requireTemporaryWindow, requireProfilePhotoPath, maskPhone, toMillis,
+  requireTemporaryWindow, requireProfilePhotoPath, maskPhone, toMillis, requireNotAuthorizationOnly,
 } from './access.js';
 
 const USERS = 'users';
@@ -64,6 +64,13 @@ export const NotificationType = Object.freeze({
   lossRecoveryScheduled: 'loss_recovery_scheduled',
   deductionAwaitingApproval: 'deduction_awaiting_approval',
   deductionApplied: 'deduction_applied',
+  // Phase 8: generic texts only - never a name or an amount.
+  afterHoursAuthorized: 'after_hours_authorized',
+  afterHoursExpiring: 'after_hours_expiring',
+  cashHandoverPending: 'cash_handover_pending',
+  cashHandoverSubmitted: 'cash_handover_submitted',
+  cashDiscrepancyDetected: 'cash_discrepancy_detected',
+  cashDiscrepancyResolved: 'cash_discrepancy_resolved',
   // Phase 7: generic texts only - never a name, share count or amount.
   shareTransactionPending: 'share_transaction_pending',
   shareTransactionCompleted: 'share_transaction_completed',
@@ -700,6 +707,8 @@ export async function setUserPermissions(deps, callerUid, rawData, now = Date.no
     }
     // Adding a grant or lifting a denial hands out access: you must hold it.
     for (const p of [...added, ...undenied]) requireCanGrant(actor.data, actor.perms, p);
+    // Phase 8: after-hours operation is never a permanent permission.
+    for (const p of added) requireNotAuthorizationOnly(p);
     // Admin-only permissions are only ever touched by an Admin.
     if (actor.data.role !== 'admin') {
       for (const p of [...removed, ...newlyDenied]) {
@@ -731,6 +740,7 @@ export async function grantTemporaryPermission(deps, callerUid, rawData, now = D
   const uid = requireUid(data.uid);
   const permission = data.permission;
   if (!isPermission(permission)) throw invalid('Choose a valid permission.', 'permission');
+  requireNotAuthorizationOnly(permission);
   const reason = requireReason(data.reason);
   const { startsAt, expiresAt } = requireTemporaryWindow(data.startsAt, data.expiresAt, now);
 

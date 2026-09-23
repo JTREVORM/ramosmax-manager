@@ -3,7 +3,8 @@
 // ===========================================================================
 // Callable functions for sign-in, user administration, operations, billing,
 // loyalty, finance, expenses, inventory, attendance, allowances, payroll,
-// losses, shareholders, shares and dividends. Except for
+// losses, shareholders, shares, dividends, after-hours work and cash
+// handovers. Except for
 // `signInWithPhonePassword` (which is how a session starts), the caller's
 // identity comes from the verified Firebase ID token that the Functions
 // runtime checks before our code runs. Everything else is decided on the
@@ -29,6 +30,7 @@ import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { logger } from 'firebase-functions';
 
 import { makeNotifier } from './notify.js';
+import * as afterHours from './after_hours.js';
 import * as allowances from './allowances.js';
 import * as attendance from './attendance.js';
 import * as billing from './billing.js';
@@ -217,6 +219,18 @@ export const payDividend = callable('payDividend', dividends.payDividend);
 export const reverseDividendPayment = callable('reverseDividendPayment', dividends.reverseDividendPayment);
 export const cancelDividend = callable('cancelDividend', dividends.cancelDividend);
 
+// After-hours operations and cash handovers (Phase 8).
+export const authorizeAfterHours = callable('authorizeAfterHours', afterHours.authorizeAfterHours);
+export const revokeAfterHours = callable('revokeAfterHours', afterHours.revokeAfterHours);
+export const updateAfterHoursPolicy = callable('updateAfterHoursPolicy', afterHours.updateAfterHoursPolicy);
+export const openAfterHoursSession = callable('openAfterHoursSession', afterHours.openAfterHoursSession);
+export const closeAfterHoursSession = callable('closeAfterHoursSession', afterHours.closeAfterHoursSession);
+export const cancelAfterHoursSession = callable('cancelAfterHoursSession', afterHours.cancelAfterHoursSession);
+export const submitCashHandover = callable('submitCashHandover', afterHours.submitCashHandover);
+export const receiveCashHandover = callable('receiveCashHandover', afterHours.receiveCashHandover);
+export const reviewCashDiscrepancy = callable('reviewCashDiscrepancy', afterHours.reviewCashDiscrepancy);
+export const resolveCashDiscrepancy = callable('resolveCashDiscrepancy', afterHours.resolveCashDiscrepancy);
+
 // Recurring bills: creates due items (draft expenses) and reminders. Never pays.
 export const sweepRecurringExpenses = onSchedule(
   { schedule: 'every day 06:00', timeZone: 'Africa/Kampala' },
@@ -231,5 +245,7 @@ export const sweepTemporaryGrants = onSchedule(
   async () => {
     const result = await admin.sweepTemporaryGrants(dependencies());
     logger.info('temporary grant sweep', result);
+    // Phase 8: after-hours authorisations (status housekeeping, "ending soon").
+    logger.info('after-hours sweep', await afterHours.sweepAfterHours(dependencies()));
   },
 );

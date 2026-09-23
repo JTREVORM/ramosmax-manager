@@ -8,9 +8,11 @@ import '../../../core/money/money.dart';
 import '../../../core/services/callables.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/feedback.dart';
+import '../../../models/after_hours.dart';
 import '../../../models/invoice.dart';
 import '../../../models/loyalty.dart';
 import '../../../models/payment.dart';
+import '../../after_hours/application/after_hours_providers.dart' show afterHoursPolicyProvider, myOpenSessionProvider;
 import '../../finance/application/finance_providers.dart' show paymentAccountOptionsProvider;
 import '../../operations/presentation/operations_widgets.dart';
 import '../application/billing_providers.dart';
@@ -264,12 +266,23 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
       final Money a when a > inv.outstanding => 'More than the ${inv.outstanding.format()} owed. Give change instead.',
       _ => null,
     };
+    // Phase 8: during an after-hours session (or for someone who may only
+    // collect after hours) only the policy's methods are offered. The server
+    // enforces the same policy and ties the payment to the open session.
+    final afterHours = canDo(ref, Permission.afterHoursRequest) ? ref.watch(myOpenSessionProvider) : null;
+    final collectOnly = !canDo(ref, Permission.paymentsRecord);
+    final restricted = afterHours != null || collectOnly;
+    final methods = restricted
+        ? (ref.watch(afterHoursPolicyProvider).value ?? const AfterHoursPolicy()).allowedPaymentMethods
+        : PaymentMethod.values;
+    if (methods.isNotEmpty && !methods.contains(_method)) _method = methods.first;
+    final noSession = collectOnly && afterHours == null;
     final needsRef = _method.needsReference && _reference.text.trim().isEmpty;
     // Phase 5: the payment lands in a financial account. With several active
     // bank accounts the cashier says which one received a bank payment.
     final banks = ref.watch(paymentAccountOptionsProvider).value ?? const [];
     final needsBank = _method == PaymentMethod.bank && banks.length > 1 && _bankAccountId == null;
-    final ready = amount != null && amountError == null && !needsRef && !needsBank;
+    final ready = amount != null && amountError == null && !needsRef && !needsBank && !noSession && methods.isNotEmpty;
     return Padding(
       padding: EdgeInsets.fromLTRB(AppSpacing.md, 0, AppSpacing.md, MediaQuery.viewInsetsOf(context).bottom + AppSpacing.md),
       child: SingleChildScrollView(
@@ -278,6 +291,10 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
           Text('${inv.invoiceNumber} · ${inv.numberPlate}', style: theme.textTheme.bodySmall),
           const SizedBox(height: AppSpacing.sm),
           MoneyLine('Outstanding', inv.outstanding, emphasis: true),
+          if (afterHours != null)
+            Text('After-hours session ${afterHours.sessionNumber}: cash you collect is added to what you hand over.',
+                key: const Key('payment-after-hours-note'), style: theme.textTheme.bodySmall),
+          if (noSession) const InlineError('Open your after-hours session before collecting payments.'),
           const SizedBox(height: AppSpacing.sm),
           TextField(
             key: const Key('payment-amount-field'),
@@ -288,7 +305,7 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
           ),
           const SizedBox(height: AppSpacing.sm),
           Wrap(spacing: AppSpacing.xs, runSpacing: AppSpacing.xs, children: [
-            for (final m in PaymentMethod.values)
+            for (final m in methods)
               ChoiceChip(
                 key: Key('method-${m.key}'),
                 label: Text(m.label),

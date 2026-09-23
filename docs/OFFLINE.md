@@ -74,3 +74,16 @@ The client's cached balance is never the basis for a financial decision. The ser
 - **Also online only:** *Ownership on a date* and *My Shareholding*, which are function calls.
 - **Retries:** issues, transfers, adjustments, reversals, contributions, dividend creation and dividend payments carry
   a `requestId`, so a retry after a lost response is recorded once.
+
+## Phase 8: after-hours operations and cash handovers
+
+- **Viewable offline:** authorisations, sessions, custody entries, handovers and discrepancies, from the Firestore
+  cache. The expected cash shown offline is the last server figure, never a figure calculated on the device.
+- **Online only:** every command goes through `AfterHoursActions`, which uses `runOnline`, so nothing is queued. That
+  covers authorise, revoke, the policy, opening, closing and cancelling a session, submitting and receiving a
+  handover, and reviewing or resolving a discrepancy. An after-hours payment is a normal `recordPayment`, which is
+  online only too.
+- **Why:** the server clock decides whether the authorisation is still in force, so a queued command could otherwise
+  act after it ended. Widget and unit tests check that offline calls never reach the server.
+- **Retries:** authorise, open, submit, receive and resolve carry a `requestId`, so a retry after a lost response is
+  recorded once.

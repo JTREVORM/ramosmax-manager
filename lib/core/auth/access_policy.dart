@@ -96,9 +96,11 @@ abstract final class AccessPolicy {
   }
 
   /// Permissions [actor] may hand out, in catalogue order.
+  /// Never offers the Phase 8 authorisation-only permissions: they come only
+  /// with an after-hours authorisation (the server refuses them anyway).
   static List<Permission> grantablePermissions(AppUser actor, DateTime now) => [
         for (final p in Permission.values)
-          if (canGrant(actor, p, now)) p,
+          if (canGrant(actor, p, now) && !p.isAuthorizationOnly) p,
       ];
 
   /// Administrators always keep user-management access (mirrors

@@ -470,8 +470,11 @@ export async function resolvePaymentAccount(tx, db, method, requestedId) {
   return 'bank_1';
 }
 
-/** Checks the payment account and posts the payment. Call after all reads. */
-export function postCustomerPayment(ledger, { accountId, method, actor, amountUgx, payment }) {
+/**
+ * Checks the payment account and posts the payment. Call after all reads.
+ * [extra] adds context fields to the ledger entry (Phase 8: after-hours tags).
+ */
+export function postCustomerPayment(ledger, { accountId, method, actor, amountUgx, payment, extra = {} }) {
   const account = ledger.requireActive(accountId, actor.uid);
   const expected = method === 'cash' ? 'cash' : method === 'bank' ? 'bank' : 'mobile_money';
   if (account.type !== expected) throw invalid('That account does not receive this payment method.', 'account');
@@ -487,6 +490,7 @@ export function postCustomerPayment(ledger, { accountId, method, actor, amountUg
       reference: payment.reference ?? null,
       description: `Payment ${payment.receiptNumber} for ${payment.invoiceNumber} (${payment.numberPlate})`,
       paymentMethod: method,
+      ...extra,
     },
   });
 }

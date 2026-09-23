@@ -65,6 +65,19 @@ Phase 7 adds (generic text — never a shareholder name, share count or amount):
 
 Analytics events `shareholder_action`, `share_action` and `dividend_action` carry only an action key.
 
+Phase 8 adds (generic text — never a name or amount):
+
+| Type | Sent to |
+|---|---|
+| `after_hours_authorized` | The authorised worker |
+| `after_hours_expiring` | The worker, once, 30 minutes before the authorisation ends (scheduled sweep) |
+| `cash_handover_pending` | Holders of `cash_handover.approve` when a session closes with cash; the worker if someone else closed it |
+| `cash_handover_submitted` | Holders of `cash_handover.approve` |
+| `cash_discrepancy_detected` | The worker and holders of `after_hours.discrepancy.review` |
+| `cash_discrepancy_resolved` | The worker and the person who recorded the discrepancy |
+
+The Analytics event `after_hours_action` carries only an action key in `outcome`.
+
 Workers only ever receive notifications about themselves. Auditors receive none by default. The Phase 6 Analytics
 events `attendance_action`, `allowance_action`, `payroll_action` and `loss_action` carry only an action key in
 `outcome`, never a salary, amount or name.

@@ -107,6 +107,9 @@ abstract final class AnalyticsEvents {
   static const String shareAction = 'share_action';
   static const String dividendAction = 'dividend_action';
 
+  // Phase 8 - never a name or amount; `outcome` holds only an action key.
+  static const String afterHoursAction = 'after_hours_action';
+
   static const Set<String> all = {
     signInSucceeded, signInFailed, passwordChanged, passwordReset, sessionStarted, accessDenied, signedOut,
     userManagementOpened, userCreated, userRoleChanged, userActivated, userDeactivated,
@@ -117,6 +120,7 @@ abstract final class AnalyticsEvents {
     financeAction, expenseAction, inventoryAction,
     attendanceAction, allowanceAction, payrollAction, lossAction,
     shareholderAction, shareAction, dividendAction,
+    afterHoursAction,
   };
 
   static const Set<String> allowedParams = {'role', 'reason', 'country', 'resend', 'failure_kind', 'outcome', 'count'};

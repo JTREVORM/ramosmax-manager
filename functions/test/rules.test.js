@@ -732,3 +732,112 @@ describe('shareholders, shares and dividends (Phase 7)', () => {
     }
   });
 });
+
+describe('after-hours operations and cash handovers (Phase 8)', () => {
+  // `worker` and `tempWorker` are two different workers.
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      const put = (path, data) => setDoc(doc(db, path), data);
+      const H = 3600_000;
+      const user = (uid, temporaryPermissions) => put(`users/${uid}`, {
+        uid, role: 'worker', active: true, phoneNumber: '+256772000199', fullName: uid, permissions: [], deniedPermissions: [], temporaryPermissions,
+      });
+      await user('ahLive', { 'invoices.view': { startsAt: Timestamp.fromMillis(Date.now() - H), expiresAt: Timestamp.fromMillis(Date.now() + H), grantId: 'g8' } });
+      await user('ahExpired', { 'invoices.view': { startsAt: Timestamp.fromMillis(Date.now() - 3 * H), expiresAt: Timestamp.fromMillis(Date.now() - H), grantId: 'g9' } });
+      await put('invoices/inv1', { invoiceNumber: 'RMX-INV-000001', totalUgx: 15000 });
+      await put('after_hours_access/a1', { authorizationNumber: 'RMX-AH-000001', staffUid: 'worker', status: 'active' });
+      await put('after_hours_access/a2', { authorizationNumber: 'RMX-AH-000002', staffUid: 'tempWorker', status: 'active' });
+      await put('after_hours_sessions/s1', { sessionNumber: 'RMX-AHS-000001', staffUid: 'worker', status: 'open', expectedCashUgx: 65000 });
+      await put('after_hours_sessions/s2', { sessionNumber: 'RMX-AHS-000002', staffUid: 'tempWorker', status: 'open', expectedCashUgx: 30000 });
+      await put('after_hours_cash/c1', { entryNumber: 'RMX-AHC-000001', staffUid: 'worker', sessionId: 's1', cashDeltaUgx: 15000 });
+      await put('cash_handovers/h1', { handoverNumber: 'RMX-HO-000001', staffUid: 'worker', status: 'pending', expectedCashUgx: 65000 });
+      await put('cash_handovers/h2', { handoverNumber: 'RMX-HO-000002', staffUid: 'tempWorker', status: 'submitted', expectedCashUgx: 30000 });
+      await put('cash_discrepancies/d1', { discrepancyNumber: 'RMX-AHD-000001', staffUid: 'worker', status: 'open', differenceUgx: -5000 });
+      await put('settings/after_hours_policy', { allowedPaymentMethods: ['cash', 'mtn_merchant', 'airtel_merchant'] });
+    });
+  });
+
+  const read = (uid, path) => getDoc(doc(as(uid), path));
+  const ALL = ['admin', 'manager', 'cashier', 'worker', 'tempWorker', 'auditor', 'shareholder', 'inactiveAdmin', 'pendingAdmin', 'expiredAdmin'];
+  const canRead = {
+    'after_hours_access/a1': ['admin', 'manager', 'auditor', 'worker'],
+    'after_hours_access/a2': ['admin', 'manager', 'auditor', 'tempWorker'],
+    'after_hours_sessions/s1': ['admin', 'manager', 'auditor', 'worker'],
+    'after_hours_sessions/s2': ['admin', 'manager', 'auditor', 'tempWorker'],
+    'after_hours_cash/c1': ['admin', 'manager', 'auditor', 'worker'],
+    'cash_handovers/h1': ['admin', 'manager', 'auditor', 'worker'],
+    'cash_handovers/h2': ['admin', 'manager', 'auditor', 'tempWorker'],
+    'cash_discrepancies/d1': ['admin', 'manager', 'auditor', 'worker'],
+    'settings/after_hours_policy': ['admin', 'manager', 'cashier', 'worker', 'tempWorker', 'auditor', 'shareholder'],
+  };
+
+  for (const [path, allowed] of Object.entries(canRead)) {
+    test(`read ${path}: ${allowed.join(', ')} only; never unauthenticated`, async () => {
+      for (const uid of ALL) {
+        if (allowed.includes(uid)) await assertSucceeds(read(uid, path));
+        else await assertFails(read(uid, path));
+      }
+      await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(), path)));
+    });
+  }
+
+  test('a worker queries only their own after-hours records, never another worker\'s', async () => {
+    const db = as('worker');
+    for (const c of ['after_hours_access', 'after_hours_sessions', 'after_hours_cash', 'cash_handovers', 'cash_discrepancies']) {
+      await assertSucceeds(getDocs(query(collection(db, c), where('staffUid', '==', 'worker'))));
+      await assertFails(getDocs(query(collection(db, c), where('staffUid', '==', 'tempWorker'))));
+      await assertFails(getDocs(collection(db, c)));
+    }
+  });
+
+  test('no client - admin included - may write authorisations, sessions, expected cash, handovers or discrepancy resolutions', async () => {
+    for (const uid of ['admin', 'manager', 'cashier', 'worker', 'tempWorker', 'auditor', 'shareholder']) {
+      const db = as(uid);
+      await assertFails(setDoc(doc(db, `after_hours_access/${uid}-self`), { staffUid: uid, status: 'active' }));
+      await assertFails(updateDoc(doc(db, 'after_hours_access/a1'), { status: 'active', expiresAt: Timestamp.fromMillis(Date.now() + 99 * 3600_000) }));
+      await assertFails(updateDoc(doc(db, 'after_hours_sessions/s1'), { expectedCashUgx: 0 }));
+      await assertFails(updateDoc(doc(db, 'after_hours_sessions/s2'), { status: 'reconciled' }));
+      await assertFails(addDoc(collection(db, 'after_hours_sessions'), { staffUid: uid, status: 'open' }));
+      await assertFails(deleteDoc(doc(db, 'after_hours_sessions/s1')));
+      await assertFails(addDoc(collection(db, 'after_hours_cash'), { staffUid: uid, cashDeltaUgx: -65000 }));
+      await assertFails(updateDoc(doc(db, 'cash_handovers/h1'), { status: 'received', actualAmountUgx: 65000, differenceUgx: 0 }));
+      await assertFails(updateDoc(doc(db, 'cash_handovers/h1'), { expectedCashUgx: 1 }));
+      await assertFails(deleteDoc(doc(db, 'cash_handovers/h2')));
+      await assertFails(updateDoc(doc(db, 'cash_discrepancies/d1'), { status: 'waived', resolution: 'forged' }));
+      await assertFails(deleteDoc(doc(db, 'cash_discrepancies/d1')));
+      await assertFails(setDoc(doc(db, 'settings/after_hours_policy'), { allowedPaymentMethods: ['bank'] }));
+      await assertFails(setDoc(doc(db, 'counters/cash_handovers'), { next: 1 }));
+    }
+  });
+
+  test('a worker cannot grant themselves after-hours (or any) permissions on their own profile', async () => {
+    const future = Timestamp.fromMillis(Date.now() + 3600_000);
+    await assertFails(updateDoc(doc(as('worker'), 'users/worker'), {
+      temporaryPermissions: { 'after_hours.operate': { startsAt: Timestamp.now(), expiresAt: future, grantId: 'x' } },
+    }));
+    await assertFails(updateDoc(doc(as('worker'), 'users/worker'), { permissions: ['after_hours.cash.collect', 'payments.record'] }));
+  });
+
+  test('an expired after-hours grant opens nothing; a live one opens exactly its permission', async () => {
+    await assertSucceeds(read('ahLive', 'invoices/inv1'));
+    await assertFails(read('ahExpired', 'invoices/inv1'));
+    await assertFails(read('ahLive', 'financial_accounts/cash_at_hand'));
+    await assertFails(read('ahLive', 'cash_handovers/h1'));
+  });
+
+  test('a denied permission removes after-hours visibility even from a manager', async () => {
+    await env.withSecurityRulesDisabled((ctx) => updateDoc(doc(ctx.firestore(), 'users/manager'), { deniedPermissions: ['after_hours.view', 'after_hours.approve'] }));
+    await assertFails(read('manager', 'after_hours_sessions/s1'));
+    await assertSucceeds(read('manager', 'cash_handovers/h1')); // still a handover receiver (cash_handover.approve)
+    await assertFails(read('manager', 'after_hours_cash/c1'));
+  });
+
+  test('unauthenticated clients can neither read nor write any of it', async () => {
+    const anon = env.unauthenticatedContext().firestore();
+    for (const c of ['after_hours_access', 'after_hours_sessions', 'after_hours_cash', 'cash_handovers', 'cash_discrepancies']) {
+      await assertFails(getDocs(collection(anon, c)));
+      await assertFails(setDoc(doc(anon, `${c}/x`), { any: 1 }));
+    }
+  });
+});

@@ -29,6 +29,7 @@ import {
   INTAKES, audit, freshActor, nextNumber, notFound, requireDocId, requireServiceIds, readSelectedServices, stamp,
 } from './operations.js';
 import { NotificationType, notifySafely, requireObject } from './user_admin.js';
+import { afterHoursTags, countOnSession, readAfterHoursContext } from './after_hours.js';
 
 export const ORDERS = 'worker_orders';
 const VEHICLES = 'vehicles';
@@ -148,6 +149,8 @@ export async function createServiceIntake(deps, callerUid, rawData, now = Date.n
 
   return db.runTransaction(async (tx) => {
     const actor = await freshActor(tx, db, callerUid, now, 'jobs.create');
+    // Phase 8: a job started in a live after-hours session is marked as such.
+    const afterHours = await readAfterHoursContext(tx, db, actor.uid, now);
     const vehicleRef = db.collection(VEHICLES).doc(vehicleId);
     const vehicle = await tx.get(vehicleRef);
     if (!vehicle.exists) throw notFound('That vehicle could not be found.', 'vehicle_missing');
@@ -187,12 +190,14 @@ export async function createServiceIntake(deps, callerUid, rawData, now = Date.n
       createdByName: actor.data.fullName ?? null,
       updatedAt: stamp(),
       updatedBy: actor.uid,
+      ...afterHoursTags(afterHours),
     };
     const orders = newOrders(db, ref, intake, selected, 0);
     jobNumber.commit();
     for (const o of orders) tx.set(o.ref, o.data);
     tx.set(ref, { ...intake, orders: orders.map((o) => summary(o.data)), workerIds: [] });
     tx.update(vehicleRef, { lastIntakeAt: stamp() });
+    countOnSession(tx, afterHours, 'intakesCreated');
     audit(tx, db, actor, 'jobs', 'service_intake.created', ref.id, {
       newValue: { jobNumber: jobNumber.value, vehicleId, numberPlate: v.numberPlate, serviceIds: intake.serviceIds, status },
     });
@@ -415,6 +420,8 @@ export async function updateWorkerOrderStatus(deps, callerUid, rawData, now = Da
   return db.runTransaction(async (tx) => {
     const actor = await freshActor(tx, db, callerUid, now, 'jobs.complete');
     const { ref, order, intakeRef, intake } = await readOrderAndIntake(tx, db, data.workerOrderId);
+    // Phase 8: work completed in a live after-hours session is marked as such.
+    const afterHours = data.action === 'complete' ? await readAfterHoursContext(tx, db, actor.uid, now) : null;
     if (order.workerId !== callerUid) throw deny('Only the worker assigned to this job can update it.', 'not_assignee');
     if (!rule.from.includes(order.status)) {
       throw precondition(`This job is ${order.status.replace('_', ' ')}; it cannot be moved to ${rule.to.replace('_', ' ')}.`,
@@ -428,7 +435,11 @@ export async function updateWorkerOrderStatus(deps, callerUid, rawData, now = Da
       upd.totalPausedMs = (order.totalPausedMs ?? 0) + Math.max(0, now - pausedAt);
       upd.pauseReason = null;
     }
-    if (data.action === 'complete') upd.completionNotes = completionNotes;
+    if (data.action === 'complete') {
+      upd.completionNotes = completionNotes;
+      if (afterHours?.live) Object.assign(upd, afterHoursTags(afterHours));
+      countOnSession(tx, afterHours, 'jobsCompleted');
+    }
     tx.update(ref, upd);
     tx.update(intakeRef, intakeUpdate(intake, withSummary(intake, { ...order, ...upd }), actor.uid));
     audit(tx, db, actor, 'jobs', rule.event, ref.id, {

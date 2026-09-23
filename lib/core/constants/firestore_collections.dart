@@ -81,9 +81,16 @@ abstract final class FirestoreCollections {
   static const String salaryDeductions = 'salary_deductions';
   static const String lossIncidents = 'loss_incidents';
 
-  // After-hours
+  // After-hours (Phase 8)
+  /// Authorisations (`RMX-AH-`), carried by temporary permission grants.
   static const String afterHoursAccess = 'after_hours_access';
   static const String afterHoursSessions = 'after_hours_sessions';
+
+  /// Cash-custody entries of a session (float, payments, reversals).
+  static const String afterHoursCash = 'after_hours_cash';
+
+  /// Handover differences (`RMX-AHD-`); handovers are [cashHandovers].
+  static const String cashDiscrepancies = 'cash_discrepancies';
 
   // Shareholding (Phase 7)
   static const String shareholders = 'shareholders';
@@ -129,6 +136,9 @@ abstract final class FirestoreDocs {
 
   /// Dividend approval rule (Phase 7).
   static const String dividendPolicy = 'dividend_policy';
+
+  /// After-hours payment methods, longest window and largest float (Phase 8).
+  static const String afterHoursPolicy = 'after_hours_policy';
 
   /// The register summary inside [FirestoreCollections.shareRegister].
   static const String shareRegisterCurrent = 'current';

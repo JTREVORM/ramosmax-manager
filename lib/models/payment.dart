@@ -38,6 +38,7 @@ class Payment {
     this.receivedByName,
     this.receivedAt,
     this.reversalReason,
+    this.afterHoursSessionNumber,
   });
 
   final String paymentId;
@@ -55,6 +56,10 @@ class Payment {
   final bool reversed;
   final String? reversalReason;
 
+  /// Phase 8: set when the payment was collected in an after-hours session.
+  final String? afterHoursSessionNumber;
+  bool get isAfterHours => afterHoursSessionNumber != null;
+
   static Payment fromFirestore(String id, Map<String, dynamic> d) => Payment(
         paymentId: id,
         invoiceId: d['invoiceId'] as String? ?? '',
@@ -70,6 +75,7 @@ class Payment {
         receivedAt: FirestoreConverters.toDateTime(d['receivedAt']),
         reversed: d['status'] == 'reversed',
         reversalReason: d['reversalReason'] as String?,
+        afterHoursSessionNumber: d['isAfterHours'] == true ? (d['afterHoursSessionNumber'] as String? ?? '') : null,
       );
 }
 

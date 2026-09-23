@@ -122,8 +122,17 @@ enum Permission {
   lossesSchedule('losses.schedule', 'Schedule loss recoveries'),
   lossesAdjust('losses.adjust', 'Cancel loss incidents and recoveries'),
 
+  /// Phase 8: the base permission a person needs before they can be
+  /// authorised for after-hours work; also reads their own after-hours records.
   afterHoursRequest('after_hours.request', 'Request after-hours access'),
+  /// Phase 8: authorise and revoke after-hours work, close others' sessions.
   afterHoursApprove('after_hours.approve', 'Approve after-hours access'),
+  afterHoursView('after_hours.view', 'View after-hours sessions, handovers and discrepancies'),
+  /// Granted ONLY temporarily, by an after-hours authorisation.
+  afterHoursOperate('after_hours.operate', 'Run an after-hours session'),
+  /// Granted ONLY temporarily, by an after-hours authorisation.
+  afterHoursCashCollect('after_hours.cash.collect', 'Collect customer payments after hours'),
+  afterHoursDiscrepancyReview('after_hours.discrepancy.review', 'Review and resolve cash handover discrepancies'),
 
   shareholdersView('shareholders.view', 'View shareholders'),
   /// Phase 7 self-service: a shareholder's OWN profile, shares and dividends,
@@ -173,6 +182,12 @@ enum Permission {
   /// `adminOnlyPermissions` in `functions/src/access_catalog.json`.
   bool get isAdminOnly =>
       (key.startsWith('users.') && this != Permission.usersView) || this == Permission.settingsManage;
+
+  /// Phase 8: permissions that exist only inside an after-hours authorisation
+  /// window. They are never granted permanently or through the generic
+  /// temporary-access editor. Mirrored by `authorizationOnlyPermissions` in
+  /// `functions/src/access_catalog.json`.
+  bool get isAuthorizationOnly => this == Permission.afterHoursOperate || this == Permission.afterHoursCashCollect;
 
   static Permission? tryParse(String value) {
     for (final p in values) {
@@ -265,6 +280,9 @@ abstract final class RolePermissions {
     Permission.payrollView, Permission.payrollViewOwn, Permission.payrollPrepare, Permission.payrollReview,
     Permission.lossesView, Permission.lossesCreate, Permission.lossesReview, Permission.lossesSchedule,
     Permission.afterHoursApprove,
+    // Phase 8: monitor after-hours work, receive cash handovers (cash_handover.approve
+    // above) and review discrepancies.
+    Permission.afterHoursView, Permission.afterHoursDiscrepancyReview,
     Permission.reportsOperationalView, Permission.reportsFinancialView,
     // Phase 7: register-level shareholder reports (totals, ownership
     // distribution, dividend status) - no contact or identity details, no
@@ -323,6 +341,7 @@ abstract final class RolePermissions {
     Permission.attendanceView, Permission.allowancesView, Permission.payrollView,
     Permission.salaryView, Permission.salaryHistoryView, Permission.lossesView,
     Permission.shareholdersView, Permission.shareholdersReportsView, Permission.sharesView, Permission.dividendsView,
+    Permission.afterHoursView,
     Permission.reportsOperationalView, Permission.reportsFinancialView,
     Permission.reportsPayrollView,
     Permission.auditView, Permission.settingsView,

@@ -254,3 +254,59 @@ allocation), `dividends.declare` (draft → declared).
 Menus: Admin, Manager and Auditor get **Shareholders** and **Dividends**; Admin and Auditor also get **Shares** (it
 needs `shares.view`). The Shareholder role gets **My Shareholding** instead of the old placeholder Dividends entry. A
 cashier sees **Dividends** only when granted `dividends.view`.
+
+## Phase 8 changes
+
+**Added (4 permissions):** `after_hours.view`, `after_hours.discrepancy.review`, `after_hours.operate`,
+`after_hours.cash.collect`.
+
+**Kept (Phase 1 names):**
+
+- `after_hours.request`: eligibility, plus the worker's own records;
+- `after_hours.approve`: authorise and revoke;
+- `cash_handover.submit`;
+- `cash_handover.approve`: receive and count.
+
+| Role | Phase 8 defaults |
+|---|---|
+| Admin | Everything (the two authorisation-only permissions below still need an authorisation to be of any use: a session needs one in force) |
+| Manager | `after_hours.approve`, `after_hours.view`, `after_hours.discrepancy.review`, `cash_handover.submit`, `cash_handover.approve` |
+| Auditor | `after_hours.view` (read-only) |
+| Worker | `after_hours.request` (eligible; own records only) |
+| Cashier | `cash_handover.submit` (unchanged) |
+
+**Authorisation-only permissions.** `after_hours.operate` and `after_hours.cash.collect` are listed in
+`authorizationOnlyPermissions` in `access_catalog.json`:
+
+- `setUserPermissions` and `grantTemporaryPermission` refuse to add them (`authorization_only`);
+- the permission editor never offers them;
+- they exist on a worker only as temporary grants written by `authorizeAfterHours`, and expire with it.
+
+**What an authorisation can carry** (the only allowed list, `AFTER_HOURS_GRANTABLE`):
+
+- `after_hours.operate`, `after_hours.cash.collect`;
+- `jobs.view` / `.create` / `.assign`;
+- `invoices.view` / `.create`;
+- `customers.view` / `.manage`, `vehicles.manage`.
+
+Everything else, from user management to payroll, settings, finance configuration, reversals, prices and discounts,
+is refused with `permission_not_allowed`.
+
+| Callable | Permission |
+|---|---|
+| `authorizeAfterHours`, `revokeAfterHours` | `after_hours.approve` |
+| `updateAfterHoursPolicy` | `settings.manage` |
+| `openAfterHoursSession` | `after_hours.operate` (live) + `after_hours.request` |
+| `closeAfterHoursSession`, `cancelAfterHoursSession` | Own session (`after_hours.request`) or `after_hours.approve` |
+| `recordPayment` (Phase 4) | `payments.record` **or** `after_hours.cash.collect` (the latter only in an open session) |
+| `submitCashHandover` | Own handover (`after_hours.request`) or `cash_handover.submit` |
+| `receiveCashHandover` | `cash_handover.approve`, never one's own |
+| `reviewCashDiscrepancy`, `resolveCashDiscrepancy` | `after_hours.discrepancy.review`, never one's own (+ `losses.create` to report a loss, `finance.adjust` to post an adjustment) |
+
+**Menus:**
+
+- Admin, Manager and Auditor get **After-Hours**; it replaces the placeholder *Cash Handover* entry in the
+  Manager's menu.
+- Workers get **My After-Hours**.
+- Workers also get *New Service*, *Jobs*, *Invoices* and *Receipts*, visible **only while** the authorisation's
+  temporary grants are live.

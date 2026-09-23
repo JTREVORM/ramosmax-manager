@@ -175,7 +175,9 @@ class InvoiceDetailScreen extends ConsumerWidget {
             if (i.canDiscount) _LoyaltyOffer(invoice: i),
             const SizedBox(height: AppSpacing.sm),
             Wrap(spacing: AppSpacing.xs, runSpacing: AppSpacing.xs, children: [
-              if (i.canPay && canDo(ref, Permission.paymentsRecord))
+              // Phase 8: an after-hours worker collects with after_hours.cash.collect;
+              // the server ties the payment to their open session.
+              if (i.canPay && (canDo(ref, Permission.paymentsRecord) || canDo(ref, Permission.afterHoursCashCollect)))
                 FilledButton.icon(
                   key: const Key('pay-button'),
                   onPressed: () => _pay(context, i),

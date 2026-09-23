@@ -14,7 +14,7 @@ decided by their role and permissions.
 | Firebase — production | `ramosmax-prod` (real business data, Firestore in `eur3`) |
 | Currency / time zone | UGX (whole shillings) / East Africa Time, UTC+3 |
 
-**Status: Phase 7 — shareholders, shares, ownership and dividends.** Sign-in is phone number + password (no SMS codes). On
+**Status: Phase 8 — after-hours operations and cash handovers.** Sign-in is phone number + password (no SMS codes). On
 top of the Phase 1 foundation (profile-based access control, role-aware navigation, security rules):
 
 - **Phase 2:** authorised administrators manage users, staff links, roles, permissions and temporary access in the
@@ -59,8 +59,20 @@ top of the Phase 1 foundation (profile-based access control, role-aware navigati
     (`RMX-DIV-PAY-…`), Administrator approval, payment as distributions (never operating expenses), guarded
     reversals and cancellation. See SHAREHOLDERS.md, SHARES.md and DIVIDENDS.md.
 
-Later modules (cash handover, after-hours, reports …) appear in the menus but open a "not available
-yet" screen. They never show sample data.
+- **Phase 8:**
+  - after-hours authorisations (`RMX-AH-…`) for eligible workers, carried by Phase 2 temporary permissions from a
+    fixed allow-list: nothing becomes permanent, and administration, payroll, users, settings and finance
+    configuration are never included;
+  - after-hours sessions (`RMX-AHS-…`): jobs, invoices and payments created through the normal flows are tagged to
+    the session, and payments are limited to the policy's methods;
+  - a cash-custody sub-ledger (`RMX-AHC-…`) and a server-calculated, frozen expected cash;
+  - handovers (`RMX-HO-…`) counted by a manager, and discrepancies (`RMX-AHD-…`) resolved or waived with a reason,
+    optionally reported as a Phase 6 loss incident (never an automatic deduction);
+  - payments are posted to the Phase 5 ledger once, when collected: a handover adds no revenue and no ledger entry.
+
+  See AFTER_HOURS.md and CASH_HANDOVERS.md.
+
+Later modules (reports …) appear in the menus but open a "not available yet" screen. They never show sample data.
 
 ## Quick start
 
@@ -114,6 +126,8 @@ Administrator created, as described in [docs/ADMIN_PROVISIONING.md](docs/ADMIN_P
 | Shareholders: profiles, search, statuses, register, self-service | [docs/SHAREHOLDERS.md](docs/SHAREHOLDERS.md) |
 | Shares: classes, issues, transfers, adjustments, contributions, ownership, history | [docs/SHARES.md](docs/SHARES.md) |
 | Dividends: declaration, record date, allocation, approval, payment, reversal | [docs/DIVIDENDS.md](docs/DIVIDENDS.md) |
+| After-hours authorisations, sessions, payment tagging, policy | [docs/AFTER_HOURS.md](docs/AFTER_HOURS.md) |
+| Expected cash, cash handovers, discrepancies, finance integration | [docs/CASH_HANDOVERS.md](docs/CASH_HANDOVERS.md) |
 | Collections, functions, indexes, search strategy | [docs/DATA_MODEL.md](docs/DATA_MODEL.md) |
 | Firestore collections and data conventions, money, dates, audit logs | [docs/FIRESTORE_CONVENTIONS.md](docs/FIRESTORE_CONVENTIONS.md) |
 | Security rules, secrets, privacy, storage | [docs/SECURITY.md](docs/SECURITY.md) |

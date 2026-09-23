@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/providers/core_providers.dart';
+import '../features/after_hours/presentation/after_hours_screens.dart';
+import '../features/after_hours/presentation/my_after_hours_screen.dart';
 import '../features/auth/application/session_controller.dart';
 import '../features/auth/presentation/access_denied_screen.dart';
 import '../features/auth/presentation/change_password_screen.dart';
@@ -285,6 +287,29 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 ],
               ),
               GoRoute(path: 'my-shares', builder: (_, _) => const MyShareholdingScreen()),
+              // After-hours work and cash handovers (Phase 8).
+              GoRoute(
+                path: 'after-hours',
+                builder: (_, _) => const AfterHoursScreen(),
+                routes: [
+                  GoRoute(path: 'session/:sessionId', builder: (_, state) => AfterHoursSessionScreen(sessionId: state.pathParameters['sessionId']!)),
+                  GoRoute(path: 'handover/:handoverId', builder: (_, state) => CashHandoverScreen(handoverId: state.pathParameters['handoverId']!)),
+                  GoRoute(
+                      path: 'discrepancy/:discrepancyId',
+                      builder: (_, state) => CashDiscrepancyScreen(discrepancyId: state.pathParameters['discrepancyId']!)),
+                ],
+              ),
+              GoRoute(
+                path: 'my-after-hours',
+                builder: (_, _) => const MyAfterHoursScreen(),
+                routes: [
+                  GoRoute(path: 'session/:sessionId', builder: (_, state) => AfterHoursSessionScreen(sessionId: state.pathParameters['sessionId']!, mine: true)),
+                  GoRoute(path: 'handover/:handoverId', builder: (_, state) => CashHandoverScreen(handoverId: state.pathParameters['handoverId']!, mine: true)),
+                  GoRoute(
+                      path: 'discrepancy/:discrepancyId',
+                      builder: (_, state) => CashDiscrepancyScreen(discrepancyId: state.pathParameters['discrepancyId']!, mine: true)),
+                ],
+              ),
               GoRoute(
                 path: 'profile/password',
                 builder: (_, _) => const ChangePasswordScreen(forced: false),

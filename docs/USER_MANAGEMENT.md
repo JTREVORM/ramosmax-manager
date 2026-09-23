@@ -55,8 +55,8 @@ writes the change **and its audit entries in one transaction**, and returns only
 | `changeOwnPassword` | signed in | Replaces one's own password after verifying the current one. Allowed while a change is pending. |
 | `setUserRole` | `users.roles.manage` | Reason required. Clears specialisation for non-workers. Last-Admin protection. |
 | `setUserActive` | `users.activate` / `users.deactivate` | Reason required to deactivate. Revokes sessions; never deletes or disables the Auth account. Last-Admin protection. |
-| `setUserPermissions` | `users.permissions.manage` | Replaces explicit grants and denials; one audit entry per change. |
-| `grantTemporaryPermission` | `users.permissions.temporary` or `users.permissions.manage` | Start < end, at most 30 days. Writes the record and the enforcement index. |
+| `setUserPermissions` | `users.permissions.manage` | Replaces explicit grants and denials; one audit entry per change. Refuses to add the Phase 8 authorisation-only permissions (`authorization_only`). |
+| `grantTemporaryPermission` | `users.permissions.temporary` or `users.permissions.manage` | Start < end, at most 30 days. Writes the record and the enforcement index. `after_hours.operate` / `after_hours.cash.collect` are refused (`authorization_only`): they come only with an after-hours authorisation (AFTER_HOURS.md). |
 | `revokeTemporaryPermission` | same | Ends a running or scheduled grant immediately. |
 | `linkStaff` | `users.edit` | Link, relink (optionally creating the record) or unlink. |
 | `sweepTemporaryGrants` | scheduled, every 15 min | Housekeeping and "ending soon" notifications. |

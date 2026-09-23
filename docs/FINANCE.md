@@ -264,7 +264,8 @@ recorded once. All of them are online-only (see OFFLINE.md).
 
 - There is no overdraft policy. Outflows above the balance are always refused.
 - Payments recorded before Phase 5 are not in the ledger. Enter go-live balances as opening balances.
-- Cash handovers (`cash_handover.*`) are not part of Phase 5. The menu entry still opens "not available yet".
+- Cash handovers (`cash_handover.*`) were not part of Phase 5. Phase 8 adds them as custody accounting on top of this
+  ledger (see the Phase 8 section below).
 - Reports use EAT business days, with a reversal counted on the day it is made. Period reports are limited to 400 days
   of summaries per query.
 - Deposits, transfers and adjustments are recorded and approved by the same authorised person (`approvedBy` = the
@@ -291,3 +292,19 @@ Two ledger types were added. They reuse the same accounts and ledger; no second 
   card. Income, expenses, staff pay and net cash from operations are unchanged. RamosMAX does not calculate profit.
 - **Ledger entries** carry `shareholderId` / `shareholderNumber`, `contributionId` / `contributionNumber`,
   `shareTransactionId`, or `dividendId` / `dividendNumber` / `allocationId` / `allocationNumber` for traceability.
+
+## Phase 8: after-hours payments and cash handovers
+
+No ledger type, account or revenue path was added.
+
+- **When the payment is collected:** an after-hours customer payment is an ordinary `recordPayment`. It posts once,
+  as revenue, to the account of its method (Cash at Hand for cash), in the same transaction as the payment. The ledger
+  entry is tagged `isAfterHours` / `afterHoursSessionId` / `afterHoursSessionNumber` / `afterHoursWorkerUid`.
+- **When the cash is handed over:** receiving the handover is custody accounting and posts **nothing**: the money is
+  already in Cash at Hand. The handover records `destinationAccountId: 'cash_at_hand'` for reference.
+- **A shortage or excess** changes no balance by itself. An authorised person (`finance.adjust`) may choose to post the
+  existing `adjustment` type for exactly the recorded difference when resolving the discrepancy.
+- **Reversals** of after-hours payments still go through `reversePayment` only. `reverseFinancialTransaction` refuses
+  customer payments (`use_payment_reversal`).
+
+See CASH_HANDOVERS.md.

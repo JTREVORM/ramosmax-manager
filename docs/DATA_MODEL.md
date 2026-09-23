@@ -186,6 +186,34 @@ Details: SHAREHOLDERS.md, SHARES.md, DIVIDENDS.md. Every document here is writte
 `unique_keys` gains the `shareholder_phone_…`, `shareholder_id_…` and `shareholder_uid_…` reservations. The reserved
 Phase 1 name `shares` stays unused.
 
+## After-hours operations and cash handovers (Phase 8)
+
+Details: AFTER_HOURS.md, CASH_HANDOVERS.md. Every document here is written only by the Cloud Functions; a worker reads
+only documents whose `staffUid` is their own uid.
+
+| Collection | Key fields | Number |
+|---|---|---|
+| `after_hours_access/{id}` | `staffUid`, `staffName`, `startsAt`, `expiresAt`, `reason`, `permissions[]`, `grants[]` {permission, grantId}, `openingFloatUgx`, `floatSessionId`, `status` (active/revoked/expired), `sessionIds[]`, granted / revoked by, `expiryNotified`, `requestId` | `RMX-AH-000001` |
+| `after_hours_sessions/{id}` | `staffUid`, `authorizationId`, `authorizationExpiresAt`, `supervisorUid`, `status` (open/closed/handover_pending/reconciled/cancelled), `openedAt`, `closedAt`, `openingFloatUgx`, `cashCollectedUgx`, `nonCashCollectedUgx`, `cashReversedUgx`, `expectedCashUgx`, `postCloseReversalsUgx`, `paymentCount`, `intakesCreated`, `invoicesCreated`, `jobsCompleted`, `handoverId`, `handoverStatus`, `actualReceivedUgx`, `differenceUgx` | `RMX-AHS-000001` |
+| `after_hours_cash/{id}` | Custody entries: `kind` (opening_float/payment/payment_reversal), `sessionId`, `staffUid`, `paymentId`, `receiptNumber`, `method`, `amountUgx` (signed), `cashDeltaUgx`, `affectsExpected`, `afterSessionClosed` | `RMX-AHC-000001` |
+| `cash_handovers/{id}` | `sessionId`, `staffUid`, `openingFloatUgx`, `cashCollectedUgx`, `cashReversedUgx`, `nonCashCollectedUgx`, `expectedCashUgx` (frozen), `declaredAmountUgx`, `actualAmountUgx`, `differenceUgx`, `status` (pending/submitted/received/discrepancy/reconciled), `destinationAccountId` (`cash_at_hand`), submitted / received / reconciled by | `RMX-HO-000001` |
+| `cash_discrepancies/{id}` | `handoverId`, `sessionId`, `staffUid`, `expectedCashUgx`, `declaredAmountUgx`, `actualAmountUgx`, `differenceUgx`, `kind` (shortage/excess), `reason`, `status` (open/under_review/resolved/waived), review and resolution fields, `lossIncidentId`, `adjustmentTransactionId` | `RMX-AHD-000001` |
+| `settings/after_hours_policy` | `allowedPaymentMethods` (cash, mtn_merchant, airtel_merchant), `maxAuthorizationHours` (16), `maxOpeningFloatUgx` (1,000,000) | — |
+
+- **Tags:** the fields `isAfterHours`, `afterHoursSessionId`, `afterHoursSessionNumber` and `afterHoursWorkerUid`
+  are added as follows:
+
+  | Record | Tag fields |
+  |---|---|
+  | `service_intakes`, `invoices`, `payments`, `receipts` | Always written: `isAfterHours: false` and nulls outside a session |
+  | `worker_orders` | Only when completed in a live session |
+  | The payment's `financial_transactions` entry | Only for after-hours payments |
+- **Temporary grants:** `users/{uid}/temporary_grants` records written by an authorisation carry
+  `source: 'after_hours'` and `authorizationId`.
+- **Loss incidents** created from a discrepancy carry `sourceType: 'cash_discrepancy'`, `sourceId` and
+  `sourceNumber`.
+- **`unique_keys`:** gains `after_hours_open_session_{uid}` (at most one open session per person).
+
 ## Indexes
 
 Declared in `firebase/firestore.indexes.json`. Single-field queries (plate prefix on `normalizedNumberPlate`,
@@ -202,6 +230,16 @@ use Firestore's automatic indexes.
 | `share_contributions` | `shareholderId` ↑, `createdAt` ↓ | Phase 7: one shareholder's contributions |
 | `dividend_allocations` | `dividendId` ↑, `current` ↑, `shareholderName` ↑ | Phase 7: a dividend's allocations |
 | `dividend_allocations` | `shareholderId` ↑, `current` ↑, `createdAt` ↓ | Phase 7: one shareholder's dividend history |
+| `after_hours_access` | `status` ↑, `expiresAt` ↑ | Phase 8: the sweep (ended / ending soon) |
+| `after_hours_access` | `staffUid` ↑, `createdAt` ↓ | Phase 8: a worker's own authorisations (the rules require the filter) |
+| `after_hours_access` | `status` ↑, `createdAt` ↓ | Phase 8: authorisations tab filtered by status |
+| `after_hours_sessions` | `staffUid` ↑, `openedAt` ↓ | Phase 8: a worker's own sessions |
+| `after_hours_sessions` | `status` ↑, `openedAt` ↓ | Phase 8: open sessions; sessions tab |
+| `after_hours_cash` | `staffUid` ↑, `sessionId` ↑, `createdAt` ↑ | Phase 8: a session's custody entries |
+| `cash_handovers` | `staffUid` ↑, `createdAt` ↓ | Phase 8: a worker's own handovers |
+| `cash_handovers` | `status` ↑, `createdAt` ↓ | Phase 8: handovers to receive |
+| `cash_discrepancies` | `staffUid` ↑, `createdAt` ↓ | Phase 8: a worker's own discrepancies |
+| `cash_discrepancies` | `status` ↑, `createdAt` ↓ | Phase 8: discrepancies tab |
 | `service_intakes` | `vehicleId` ↑, `status` ↑ | "Already has a service in progress" check |
 | `service_intakes` | `vehicleId` ↑, `createdAt` ↓ | Vehicle service activity |
 | `service_intakes` | `customerId` ↑, `createdAt` ↓ | Customer history |

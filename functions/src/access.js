@@ -18,6 +18,19 @@ export const ROLES = Object.freeze(Object.keys(catalog.roles));
 export const ADMIN_ONLY = new Set(catalog.adminOnlyPermissions);
 export const SPECIALIZATIONS = Object.freeze([...catalog.specializations]);
 
+/**
+ * Phase 8: permissions that exist only inside an after-hours authorisation
+ * window (after_hours.js). Never granted permanently or through the generic
+ * temporary-access grant.
+ */
+export const AUTHORIZATION_ONLY = new Set(catalog.authorizationOnlyPermissions ?? []);
+
+export function requireNotAuthorizationOnly(permission) {
+  if (AUTHORIZATION_ONLY.has(permission)) {
+    throw precondition('This permission is given only by an after-hours authorisation (After-Hours → Authorise).', 'authorization_only');
+  }
+}
+
 /** Longest temporary grant anyone may hand out. */
 export const MAX_TEMPORARY_MS = 30 * 24 * 3600_000;
 

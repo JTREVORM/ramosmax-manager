@@ -97,6 +97,18 @@ abstract final class AppRoutes {
   static String dividendDetail(String id) => '$dividends/$id';
   static const String myShareholding = '$home/my-shares';
 
+  // After-hours work and cash handovers (Phase 8). Supervisors' screens under
+  // `after-hours`, the worker's own under `my-after-hours`; each screen checks
+  // the finer permission it needs.
+  static const String afterHours = '$home/after-hours';
+  static String afterHoursSession(String id) => '$afterHours/session/$id';
+  static String afterHoursHandover(String id) => '$afterHours/handover/$id';
+  static String afterHoursDiscrepancy(String id) => '$afterHours/discrepancy/$id';
+  static const String myAfterHours = '$home/my-after-hours';
+  static String mySession(String id) => '$myAfterHours/session/$id';
+  static String myHandover(String id) => '$myAfterHours/handover/$id';
+  static String myDiscrepancy(String id) => '$myAfterHours/discrepancy/$id';
+
   // User management (Phase 2). Nested under the `users` module so the guard's
   // module check (users.view) covers every sub-screen; each screen then
   // checks the finer permission it needs, and the Cloud Functions enforce it.

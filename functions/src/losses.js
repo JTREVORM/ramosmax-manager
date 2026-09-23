@@ -66,23 +66,19 @@ async function requireNotPlanned(tx, db, deductionId) {
 // Incidents
 // ---------------------------------------------------------------------------
 
-export async function createLossIncident(deps, callerUid, rawData, now = Date.now()) {
-  const { db } = deps;
-  const data = requireObject(rawData);
-  const type = requireChoice(data.incidentType, INCIDENT_TYPES, 'Choose the type of loss.', 'incident_type');
-  const amount = requireAmount(data.amountUgx, { field: 'loss amount', max: MAX_LOSS_UGX });
-  const description = requireText(data.description, 'Description', 1000);
-  const date = requireBusinessDate(data.incidentDate, now, { field: 'incident date' });
-  const attachmentPath = optionalUpload(data.attachmentPath, 'losses');
-  const notes = optionalNotes(data.notes);
-  const requestId = requireRequestId(data.requestId);
-
-  const out = await db.runTransaction(async (tx) => {
-    const actor = await freshActor(tx, db, callerUid, now, 'losses.create');
-    const request = await readRequest(tx, db, requestId, actor.uid, 'loss_incident');
-    if (request.earlier) return request.earlier;
-    const employee = data.staffUid == null ? null : await readEmployee(tx, db, data.staffUid, { requireActive: false });
-    const numbers = await readCounter(tx, db, 'loss_incidents', 'RMX-LOSS-', 6);
+/**
+ * Reads (inside [tx]) what a new loss incident needs and returns the function
+ * that writes it with its audit entry. Shared by createLossIncident and, in
+ * Phase 8, by after-hours cash discrepancies referred for recovery - an
+ * incident is only ever REPORTED this way; recovery still needs the Phase 6
+ * review, decision and schedule.
+ */
+export async function prepareLossIncident(tx, db, actor, {
+  staffUid = null, type, amount, description, date, attachmentPath = null, notes = null, requestId = null, source = null,
+}) {
+  const employee = staffUid == null ? null : await readEmployee(tx, db, staffUid, { requireActive: false });
+  const numbers = await readCounter(tx, db, 'loss_incidents', 'RMX-LOSS-', 6);
+  return () => {
     const number = numbers.next();
     numbers.commit();
     const ref = db.collection(LOSSES).doc();
@@ -105,13 +101,36 @@ export async function createLossIncident(deps, callerUid, rawData, now = Date.no
       approvedRecoveryUgx: 0, recoveryReason: null, rejectionReason: null,
       recoveredUgx: 0, outstandingUgx: 0, deductionId: null, deductionNumber: null,
       cancelledBy: null, cancelledAt: null, cancelReason: null, cancelledOutstandingUgx: 0,
+      ...(source ? { sourceType: source.type, sourceId: source.id, sourceNumber: source.number } : {}),
       requestId,
       createdAt: stamp(), updatedAt: stamp(), updatedBy: actor.uid,
     });
     audit(tx, db, actor, 'losses', 'loss.created', ref.id, {
-      newValue: { lossNumber: number, incidentType: type, amountUgx: amount, staffUid: employee?.uid ?? null },
+      newValue: { lossNumber: number, incidentType: type, amountUgx: amount, staffUid: employee?.uid ?? null, source: source?.number ?? null },
     });
-    const result = { incidentId: ref.id, lossNumber: number };
+    return { incidentId: ref.id, lossNumber: number };
+  };
+}
+
+export async function createLossIncident(deps, callerUid, rawData, now = Date.now()) {
+  const { db } = deps;
+  const data = requireObject(rawData);
+  const type = requireChoice(data.incidentType, INCIDENT_TYPES, 'Choose the type of loss.', 'incident_type');
+  const amount = requireAmount(data.amountUgx, { field: 'loss amount', max: MAX_LOSS_UGX });
+  const description = requireText(data.description, 'Description', 1000);
+  const date = requireBusinessDate(data.incidentDate, now, { field: 'incident date' });
+  const attachmentPath = optionalUpload(data.attachmentPath, 'losses');
+  const notes = optionalNotes(data.notes);
+  const requestId = requireRequestId(data.requestId);
+
+  const out = await db.runTransaction(async (tx) => {
+    const actor = await freshActor(tx, db, callerUid, now, 'losses.create');
+    const request = await readRequest(tx, db, requestId, actor.uid, 'loss_incident');
+    if (request.earlier) return request.earlier;
+    const write = await prepareLossIncident(tx, db, actor, {
+      staffUid: data.staffUid, type, amount, description, date, attachmentPath, notes, requestId,
+    });
+    const result = write();
     saveRequest(tx, request.ref, 'loss_incident', actor.uid, result);
     return result;
   });

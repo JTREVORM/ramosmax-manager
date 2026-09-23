@@ -156,7 +156,7 @@ service cloud.firestore {
         'salary.view',
         'payroll.view', 'payroll.view.own', 'payroll.prepare', 'payroll.review',
         'losses.view', 'losses.create', 'losses.review', 'losses.schedule',
-        'after_hours.approve',
+        'after_hours.approve', 'after_hours.view', 'after_hours.discrepancy.review',
         'reports.operational.view', 'reports.financial.view',
         'shareholders.reports.view',
         'notifications.view'
@@ -217,6 +217,7 @@ service cloud.firestore {
         'attendance.view', 'allowances.view', 'payroll.view',
         'salary.view', 'salary.history.view', 'losses.view',
         'shareholders.view', 'shareholders.reports.view', 'shares.view', 'dividends.view',
+        'after_hours.view',
         'reports.operational.view', 'reports.financial.view',
         'reports.payroll.view',
         'audit.view', 'settings.view',
@@ -635,6 +636,49 @@ service cloud.firestore {
     }
 
     // ===================================================================
+    // After-hours operations and cash handovers (Phase 8)
+    // ===================================================================
+    // All read-only to clients. Authorisations, sessions, custody entries,
+    // expected cash, handover counts and discrepancy resolutions are written
+    // only by the Cloud Functions in functions/src/after_hours.js (and
+    // billing.js / jobs.js for the tags), which read the server clock,
+    // re-check the caller and write the audit trail in the same transaction.
+    //
+    // A worker (after_hours.request) reads ONLY records whose staffUid is
+    // their own sign-in uid, so a list query must filter on
+    // staffUid == their uid. Managers and auditors read everything with
+    // after_hours.view; handover receivers with cash_handover.approve;
+    // discrepancy reviewers with after_hours.discrepancy.review.
+    // after_hours.operate / after_hours.cash.collect are temporary grants
+    // and open no reads here on their own.
+
+    match /after_hours_access/{authorizationId} {
+      allow get, list: if ownWith('after_hours.request') || hasEitherPermission('after_hours.view', 'after_hours.approve');
+      allow write: if false;
+    }
+
+    match /after_hours_sessions/{sessionId} {
+      allow get, list: if ownWith('after_hours.request') || hasEitherPermission('after_hours.view', 'after_hours.approve');
+      allow write: if false;
+    }
+
+    // Custody sub-ledger: cash the worker holds (not a financial account).
+    match /after_hours_cash/{entryId} {
+      allow get, list: if ownWith('after_hours.request') || hasPermission('after_hours.view');
+      allow write: if false;
+    }
+
+    match /cash_handovers/{handoverId} {
+      allow get, list: if ownWith('after_hours.request') || hasEitherPermission('after_hours.view', 'cash_handover.approve');
+      allow write: if false;
+    }
+
+    match /cash_discrepancies/{discrepancyId} {
+      allow get, list: if ownWith('after_hours.request') || hasEitherPermission('after_hours.view', 'after_hours.discrepancy.review');
+      allow write: if false;
+    }
+
+    // ===================================================================
     // audit_logs
     // ===================================================================
     // Append-only. Entries may be created by any active user (so every module
@@ -674,7 +718,9 @@ service cloud.firestore {
     // ===================================================================
     // settings
     // ===================================================================
-    // Read-only reference data (tax rates, loyalty thresholds; Phase 7:
+    // Read-only reference data (tax rates, loyalty thresholds; Phase 8:
+    // settings/after_hours_policy - payment methods allowed after hours,
+    // longest authorisation, largest float; Phase 7:
     // settings/share_policy and settings/dividend_policy - approval and
     // payment switches only, no amounts or names; Phase 6:
     // settings/payroll_policy - reporting time, grace period, daily allowance
@@ -695,8 +741,7 @@ service cloud.firestore {
     // customer-phone and service-name reservations), login_throttle (sign-in
     // attempt limits, keyed by a hash of the phone number), staff_documents, service_jobs,
     // job_items, bank_accounts, mobile_money_accounts (Phase 5 keeps every
-    // account in financial_accounts), cash_handovers, inventory,
-    // after_hours_access, after_hours_sessions, shares (Phase 7 uses
+    // account in financial_accounts), inventory, shares (Phase 7 uses
     // shareholdings / share_transactions instead) - is denied outright until
     // the phase that owns it ships its rules alongside its code.
 

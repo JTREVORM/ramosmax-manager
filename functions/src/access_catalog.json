@@ -1,5 +1,5 @@
 {
-  "_comment": "Server-side copy of the RamosMAX access model. MUST match lib/core/auth/permissions.dart, lib/core/auth/user_role.dart and firebase/firestore.rules - test/unit/permissions_test.dart fails if they drift. passwordResetRolesForNonAdmins: roles whose passwords a non-admin holder of users.passwords.reset may reset (Managers -> Workers only). Phase 6 legacy names kept for stored grants: payroll.process is honoured as payroll.prepare and staff.salary.view as salary.view. Phase 7: the shareholder role holds shareholders.view.own (own records through getMyShareholding) instead of shareholders.view / dividends.view.",
+  "_comment": "Server-side copy of the RamosMAX access model. MUST match lib/core/auth/permissions.dart, lib/core/auth/user_role.dart and firebase/firestore.rules - test/unit/permissions_test.dart fails if they drift. passwordResetRolesForNonAdmins: roles whose passwords a non-admin holder of users.passwords.reset may reset (Managers -> Workers only). Phase 6 legacy names kept for stored grants: payroll.process is honoured as payroll.prepare and staff.salary.view as salary.view. Phase 7: the shareholder role holds shareholders.view.own (own records through getMyShareholding) instead of shareholders.view / dividends.view. Phase 8: authorizationOnlyPermissions exist only inside an after-hours authorisation window (never permanent, never through grantTemporaryPermission).",
   "permissions": [
     "users.view",
     "users.create",
@@ -99,6 +99,10 @@
     "losses.adjust",
     "after_hours.request",
     "after_hours.approve",
+    "after_hours.view",
+    "after_hours.operate",
+    "after_hours.cash.collect",
+    "after_hours.discrepancy.review",
     "shareholders.view",
     "shareholders.view.own",
     "shareholders.create",
@@ -202,6 +206,8 @@
       "losses.review",
       "losses.schedule",
       "after_hours.approve",
+      "after_hours.view",
+      "after_hours.discrepancy.review",
       "reports.operational.view",
       "reports.financial.view",
       "shareholders.reports.view",
@@ -278,6 +284,7 @@
       "shareholders.reports.view",
       "shares.view",
       "dividends.view",
+      "after_hours.view",
       "reports.operational.view",
       "reports.financial.view",
       "reports.payroll.view",
@@ -370,5 +377,9 @@
     "set",
     "can",
     "other"
+  ],
+  "authorizationOnlyPermissions": [
+    "after_hours.operate",
+    "after_hours.cash.collect"
   ]
 }

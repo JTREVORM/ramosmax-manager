@@ -30,7 +30,17 @@ enum AppModule {
   transactions('transactions', 'Transactions', Icons.swap_horiz, {Permission.financeTransactionsView}, available: true),
   reconciliation('reconciliation', 'Reconciliation', Icons.fact_check_outlined, {Permission.financeReconcile, Permission.financeView},
       available: true),
+  // Superseded in the menus by [afterHours] (Phase 8), whose Handovers tab
+  // holds the cash handovers.
   cashHandover('cash-handover', 'Cash Handover', Icons.handshake_outlined, {Permission.cashHandoverSubmit, Permission.cashHandoverApprove}),
+  // Phase 8. After-Hours: authorisations, sessions, handovers, discrepancies
+  // and reports for supervisors. My After-Hours: a worker's own authorisation,
+  // session, expected cash and handovers.
+  afterHours('after-hours', 'After-Hours', Icons.nightlight_outlined,
+      {Permission.afterHoursView, Permission.afterHoursApprove, Permission.cashHandoverApprove, Permission.afterHoursDiscrepancyReview},
+      available: true),
+  myAfterHours('my-after-hours', 'My After-Hours', Icons.nightlight_outlined, {Permission.afterHoursRequest},
+      available: true, shortLabel: 'After-hours'),
   discrepancies('discrepancies', 'Discrepancies', Icons.report_problem_outlined, {Permission.auditView}),
   expenses('expenses', 'Expenses', Icons.request_quote_outlined, {Permission.expensesView}, available: true),
   inventory('inventory', 'Inventory', Icons.inventory_2_outlined, {Permission.inventoryView}, available: true),
@@ -88,14 +98,14 @@ abstract final class RoleNavigation {
       AppModule.services, AppModule.jobs, AppModule.invoices, AppModule.payments, AppModule.receipts,
       AppModule.credit, AppModule.loyalty, AppModule.staff, AppModule.finance, AppModule.expenses,
       AppModule.inventory, AppModule.attendance, AppModule.allowances, AppModule.payroll, AppModule.losses,
-      AppModule.shareholders, AppModule.shares, AppModule.dividends,
+      AppModule.shareholders, AppModule.shares, AppModule.dividends, AppModule.afterHours,
       AppModule.reports, AppModule.users, AppModule.settings, AppModule.auditLogs,
     ],
     UserRole.manager: [
       AppModule.dashboard, AppModule.newService, AppModule.vehicles, AppModule.jobs, AppModule.customers,
       AppModule.services, AppModule.invoices,
       AppModule.payments, AppModule.receipts, AppModule.credit, AppModule.loyalty, AppModule.attendance, AppModule.allowances,
-      AppModule.payroll, AppModule.losses, AppModule.finance, AppModule.expenses, AppModule.inventory, AppModule.reports, AppModule.cashHandover,
+      AppModule.payroll, AppModule.losses, AppModule.finance, AppModule.expenses, AppModule.inventory, AppModule.reports, AppModule.afterHours,
       AppModule.shareholders, AppModule.shares, AppModule.dividends,
       AppModule.users,
     ],
@@ -109,7 +119,10 @@ abstract final class RoleNavigation {
     ],
     UserRole.worker: [
       AppModule.dashboard, AppModule.myJobs, AppModule.vehicles, AppModule.services,
-      AppModule.attendance, AppModule.allowances, AppModule.myProfile,
+      // Phase 8: shown only while an after-hours authorisation's temporary
+      // permissions (jobs.create, jobs.view, invoices.view) are in force.
+      AppModule.newService, AppModule.jobs, AppModule.invoices, AppModule.receipts,
+      AppModule.attendance, AppModule.allowances, AppModule.myAfterHours, AppModule.myProfile,
     ],
     UserRole.shareholder: [
       AppModule.dashboard, AppModule.financialSummary, AppModule.businessPerformance,
@@ -118,7 +131,7 @@ abstract final class RoleNavigation {
     UserRole.auditor: [
       AppModule.dashboard, AppModule.auditLogs, AppModule.finance, AppModule.transactions, AppModule.expenses, AppModule.inventory,
       AppModule.payroll, AppModule.attendance, AppModule.allowances, AppModule.losses,
-      AppModule.reconciliation, AppModule.discrepancies, AppModule.users,
+      AppModule.reconciliation, AppModule.discrepancies, AppModule.afterHours, AppModule.users,
       AppModule.jobs, AppModule.invoices, AppModule.payments, AppModule.receipts, AppModule.credit,
       AppModule.loyalty, AppModule.vehicles, AppModule.customers, AppModule.services,
       AppModule.shareholders, AppModule.shares, AppModule.dividends,
