@@ -57,6 +57,7 @@ class BillingRepository {
   Stream<List<Payment>> watchPaymentsOf(String invoiceId) => _c(FirestoreCollections.payments)
       .where('invoiceId', isEqualTo: invoiceId)
       .orderBy('receivedAt')
+      .limit(200)
       .snapshots()
       .map(_payments);
 

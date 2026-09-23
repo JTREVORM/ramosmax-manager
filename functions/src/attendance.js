@@ -262,7 +262,8 @@ export async function correctAttendance(deps, callerUid, rawData, now = Date.now
   const reason = requireReason(data.reason);
   if (!CORRECTABLE.some((k) => k in data)) throw invalid('Nothing to correct.', 'no_changes');
 
-  return db.runTransaction(async (tx) => {
+  let staffUid = null;
+  const result = await db.runTransaction(async (tx) => {
     const actor = await freshActor(tx, db, callerUid, now, 'attendance.correct');
     const { ref, rec } = await readAttendance(tx, db, data.attendanceId);
     requireNotOwn(actor, rec.staffUid, 'You cannot correct your own attendance.');
@@ -362,7 +363,11 @@ export async function correctAttendance(deps, callerUid, rawData, now = Date.now
       });
     }
     audit(tx, db, actor, 'attendance', 'attendance.corrected', ref.id, { previousValue: previous, newValue: corrected, reason });
+    staffUid = rec.staffUid ?? null;
     return { attendanceId: ref.id, correctionId: corrRef.id, cancelledAllowanceId: allowance ? rec.allowanceId : null };
   });
+  // Phase 9: the staff member sees that their record changed (never who or why on a lock screen).
+  if (staffUid) await notifySafely(deps, staffUid, NotificationType.attendanceCorrected, result.attendanceId);
+  return result;
 }
 

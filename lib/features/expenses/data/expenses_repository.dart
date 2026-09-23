@@ -43,6 +43,7 @@ class ExpensesRepository {
       _c(FirestoreCollections.expenses).doc(id).snapshots().map((s) => s.exists ? Expense.fromFirestore(s.id, s.data()!) : null);
 
   Stream<List<ExpenseCategory>> watchCategories() => _c(FirestoreCollections.expenseCategories)
+      .limit(200)
       .snapshots()
       .map((s) => ExpenseCategory.merge([for (final d in s.docs) ExpenseCategory.fromFirestore(d.id, d.data())]));
 

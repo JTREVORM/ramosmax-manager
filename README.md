@@ -14,7 +14,7 @@ decided by their role and permissions.
 | Firebase — production | `ramosmax-prod` (real business data, Firestore in `eur3`) |
 | Currency / time zone | UGX (whole shillings) / East Africa Time, UTC+3 |
 
-**Status: Phase 8 — after-hours operations and cash handovers.** Sign-in is phone number + password (no SMS codes). On
+**Status: Phase 9 complete — all planned development phases are done.** Sign-in is phone number + password (no SMS codes). On
 top of the Phase 1 foundation (profile-based access control, role-aware navigation, security rules):
 
 - **Phase 2:** authorised administrators manage users, staff links, roles, permissions and temporary access in the
@@ -72,7 +72,24 @@ top of the Phase 1 foundation (profile-based access control, role-aware navigati
 
   See AFTER_HOURS.md and CASH_HANDOVERS.md.
 
-Later modules (reports …) appear in the menus but open a "not available yet" screen. They never show sample data.
+- **Phase 9:**
+  - notification hardening:
+    - de-duplication, and preferences with critical notices always on;
+    - delivery records and dead-token clean-up;
+    - nine new events, including an overdue-handover reminder;
+    - an in-app inbox, and tapped pushes that open the record;
+  - server-calculated, permission-filtered **reports** with CSV export: executive summary, money in and out, revenue,
+    payment methods, outstanding, expenses, inventory, workforce, shareholders and after-hours;
+  - **Audit Logs** and **Settings** screens;
+  - modified-client tests for every server-owned collection, Storage rule tests, and concurrency and idempotency tests;
+  - "may already have been saved" handling of lost answers, bounded queries, and small-phone layout fixes;
+  - production-readiness, backup and manual-test documentation.
+
+  See REPORTS.md and PRODUCTION_READINESS.md.
+
+Every menu entry opens a working screen, and a unit test enforces it. **Automated tests passing is not the same as
+production-ready:** deployment, configuration (including backups), manual testing and business, legal and accounting
+decisions remain. See [docs/PRODUCTION_READINESS.md](docs/PRODUCTION_READINESS.md) §8.
 
 ## Quick start
 
@@ -90,7 +107,7 @@ flutter run --flavor dev -t lib/main_dev.dart
 flutter test
 flutter analyze
 
-# Cloud Functions + security-rule tests (Firebase emulators, needs Java 21+)
+# Cloud Functions + Firestore and Storage security-rule tests (Auth, Firestore and Storage emulators, needs Java 21+)
 cd functions && npm install && npm test
 
 # If the system drive is short of space, point the emulator cache and temp files elsewhere first, e.g.
@@ -128,6 +145,8 @@ Administrator created, as described in [docs/ADMIN_PROVISIONING.md](docs/ADMIN_P
 | Dividends: declaration, record date, allocation, approval, payment, reversal | [docs/DIVIDENDS.md](docs/DIVIDENDS.md) |
 | After-hours authorisations, sessions, payment tagging, policy | [docs/AFTER_HOURS.md](docs/AFTER_HOURS.md) |
 | Expected cash, cash handovers, discrepancies, finance integration | [docs/CASH_HANDOVERS.md](docs/CASH_HANDOVERS.md) |
+| Reports, export, Audit Logs and Settings screens | [docs/REPORTS.md](docs/REPORTS.md) |
+| Production readiness: deployment, backups, manual test checklist, blockers | [docs/PRODUCTION_READINESS.md](docs/PRODUCTION_READINESS.md) |
 | Collections, functions, indexes, search strategy | [docs/DATA_MODEL.md](docs/DATA_MODEL.md) |
 | Firestore collections and data conventions, money, dates, audit logs | [docs/FIRESTORE_CONVENTIONS.md](docs/FIRESTORE_CONVENTIONS.md) |
 | Security rules, secrets, privacy, storage | [docs/SECURITY.md](docs/SECURITY.md) |

@@ -115,3 +115,76 @@ Debug builds of the dev flavor don't send Analytics (events print to the console
   obfuscated traces are readable.
 
 Neither service ever receives passwords, tokens, phone numbers, names, amounts, bank or ID numbers, or salaries.
+
+## Phase 9: notification hardening
+
+**One notifier** (`functions/src/notify.js`); nothing parallel was added.
+
+**New events:**
+
+| Type | Sent to | Category |
+|---|---|---|
+| `password_reset` | The person whose password an Administrator reset (never the password) | access (always on) |
+| `job_reassigned` | The worker a job was taken from | jobs |
+| `job_cancelled` | The worker whose job was cancelled | jobs |
+| `job_ready_to_invoice` | The person who started the job, when its last order completes | jobs |
+| `expense_awaiting_approval` | Holders of `expenses.review` / `expenses.approve` (not the author) | finance |
+| `expense_decided` | The author, when approved, rejected or paid | finance |
+| `reconciliation_difference` | Holders of `finance.adjust` | finance |
+| `attendance_corrected` | The staff member | workforce |
+| `cash_handover_reminder` | Worker and receivers, once, when a handover is still open 2 hours after its session closed (scheduled) | after-hours (always on) |
+
+**Reliability:**
+
+- **De-duplicated.** Each in-app record has a deterministic ID from recipient, type, record and a 10-minute window,
+  and is written with `create()`. A retried request, an overlapping scheduled run or a repeated trigger never notifies
+  twice (tested with three simultaneous sends).
+- **Recipients:**
+  - an inactive or unknown account receives nothing, except the "access turned off" notice itself;
+  - holders of a permission are looked up among active accounts only.
+- **Delivery is recorded.** Each record carries `push.status`: `sent`, `partial`, `failed`, or `skipped` (muted, no
+  device, no messaging). Also recorded: the success and failure counts, and how many dead tokens were removed.
+  Delivery is therefore auditable without logs.
+- **Tokens:**
+  - unregistered or invalid tokens are removed at send time;
+  - transient errors keep the token;
+  - duplicates are ignored;
+  - at most 500 tokens per send (the FCM limit);
+  - the app removes its token at sign-out and replaces it on refresh.
+- **Failure never breaks business.** Notifications are sent after the business transaction commits, through
+  `notifySafely`. An FCM outage or notifier error is recorded and logged, and never fails the payment, approval or
+  change that caused it (tested).
+- **No sensitive text.** Titles and bodies stay generic: no names, amounts, salaries or share counts on a lock
+  screen.
+
+**Preferences** (`users/{uid}.notificationPreferences`, written only by `updateNotificationPreferences`):
+
+- **What can be muted:** push only, per category (jobs, sales, finance, workforce, shareholding, after-hours). The
+  in-app record is always kept.
+- **What is always on:** access notices, personal pay (payroll paid, deductions, recoveries), after-hours
+  authorisation and ending, overdue handovers, and cash discrepancies.
+- **In the app:** Notifications → settings (tune icon). Critical categories are shown locked on.
+- **Rules:** a client cannot write the preferences field directly (tested).
+
+**In the app:**
+
+- a bell with the unread count in the app bar;
+- the **Notifications** inbox (`/app/notifications`), newest 50: tapping a notice marks it read and opens its record,
+  which the route guard still checks; "Mark all as read";
+- a tapped push, including the one that launched the app, opens the same record.
+
+**Scheduled jobs:** reviewed, and all retry-safe (see PRODUCTION_READINESS.md §3). No new schedule was created: the
+handover reminder runs in the existing 15-minute sweep.
+
+**Analytics (Phase 9)**, action keys only:
+
+- `notification_preferences_changed` (count);
+- `report_viewed` and `report_exported` (report key).
+
+**Crashlytics review (Phase 9):**
+
+- only the Firebase UID and role are attached;
+- `AppFailure` is reported as kind and code, never its user-facing message;
+- callable failures are expected outcomes and are not reported as crashes;
+- functions log only an error's code and message, never request data (which can hold passwords);
+- no passwords, tokens, keys, identity documents or amounts are logged.

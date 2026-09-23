@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../core/providers/core_providers.dart';
 import '../features/after_hours/presentation/after_hours_screens.dart';
 import '../features/after_hours/presentation/my_after_hours_screen.dart';
+import '../features/audit/presentation/audit_log_screen.dart';
 import '../features/auth/application/session_controller.dart';
 import '../features/auth/presentation/access_denied_screen.dart';
 import '../features/auth/presentation/change_password_screen.dart';
@@ -20,6 +21,7 @@ import '../features/dashboard/presentation/module_screens.dart';
 import '../features/expenses/presentation/expense_screens.dart';
 import '../features/finance/presentation/finance_screens.dart';
 import '../features/inventory/presentation/inventory_screens.dart';
+import '../features/notifications/presentation/notifications_screens.dart';
 import '../features/jobs/presentation/my_jobs_screen.dart';
 import '../features/operations/presentation/customer_screens.dart';
 import '../features/operations/presentation/intake_screens.dart';
@@ -31,6 +33,8 @@ import '../features/payroll/presentation/allowance_screens.dart';
 import '../features/payroll/presentation/attendance_screens.dart';
 import '../features/payroll/presentation/loss_screens.dart';
 import '../features/payroll/presentation/payroll_screens.dart';
+import '../features/reports/presentation/reports_screen.dart';
+import '../features/settings/presentation/settings_screen.dart';
 import '../features/shareholders/presentation/dividend_screens.dart';
 import '../features/shareholders/presentation/my_shareholding_screen.dart';
 import '../features/shareholders/presentation/share_screens.dart';
@@ -39,6 +43,7 @@ import '../features/users/presentation/user_detail_screen.dart';
 import '../features/users/presentation/user_form_screen.dart';
 import '../features/users/presentation/user_permissions_screen.dart';
 import '../features/users/presentation/users_screen.dart';
+import '../models/business_report.dart';
 import 'app_routes.dart';
 
 /// Re-runs the router's redirect whenever the session changes.
@@ -309,6 +314,17 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                       path: 'discrepancy/:discrepancyId',
                       builder: (_, state) => CashDiscrepancyScreen(discrepancyId: state.pathParameters['discrepancyId']!, mine: true)),
                 ],
+              ),
+              // Reports, audit logs and settings (Phase 9).
+              GoRoute(path: 'reports', builder: (_, _) => const ReportsScreen()),
+              GoRoute(path: 'performance', builder: (_, _) => const ReportsScreen(initial: ReportType.executive)),
+              GoRoute(path: 'audit', builder: (_, _) => const AuditLogScreen()),
+              GoRoute(path: 'settings', builder: (_, _) => const SettingsScreen()),
+              // The signed-in person's notifications and push preferences (Phase 9).
+              GoRoute(
+                path: 'notifications',
+                builder: (_, _) => const NotificationsScreen(),
+                routes: [GoRoute(path: 'settings', builder: (_, _) => const NotificationSettingsScreen())],
               ),
               GoRoute(
                 path: 'profile/password',

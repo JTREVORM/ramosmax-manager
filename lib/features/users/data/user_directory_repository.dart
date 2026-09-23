@@ -23,7 +23,8 @@ class UserDirectoryRepository {
   /// Every user, sorted by name. RamosMAX has tens of staff, not thousands,
   /// so the list is loaded whole and searched on the device — which also keeps
   /// search working offline. Malformed profiles are skipped.
-  Stream<List<AppUser>> watchAll() => _users.snapshots().map((snap) {
+  /// Bounded (Phase 9): a small business has tens of accounts, never thousands.
+  Stream<List<AppUser>> watchAll() => _users.limit(1000).snapshots().map((snap) {
         final users = [
           for (final d in snap.docs)
             if (AppUser.fromFirestore(d.id, d.data()) case final AppUser u) u,

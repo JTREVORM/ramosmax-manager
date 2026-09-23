@@ -9,6 +9,9 @@ import '../../../core/widgets/feedback.dart';
 import '../../../routes/app_routes.dart';
 import '../../auth/application/session_controller.dart';
 import '../../auth/application/session_state.dart';
+import '../../../models/app_notification.dart';
+import '../../notifications/application/notifications_providers.dart';
+import '../../notifications/presentation/notifications_screens.dart';
 import '../application/role_navigation.dart';
 
 /// Role-aware scaffold around every signed-in screen: branded app bar,
@@ -25,6 +28,15 @@ class DashboardShell extends ConsumerWidget {
     if (session is! Authorized) return const Scaffold(body: LoadingView());
 
     final now = ref.watch(clockProvider).value ?? DateTime.now();
+    // Phase 9: a tapped push opens the record it is about (the route guard
+    // still decides whether this person may see it) and marks it read.
+    ref.listen(notificationTapsProvider, (_, next) {
+      final tap = next.value;
+      if (tap == null || tap.type == null) return;
+      if (tap.notificationId != null) ref.read(notificationActionsProvider).markRead(tap.notificationId!);
+      final n = AppNotification(id: tap.notificationId ?? '', type: tap.type!, title: '', body: '', read: false, recordId: tap.recordId);
+      context.go(notificationRoute(n, session.user, ref.read(clockProvider).value ?? DateTime.now()));
+    });
     final modules = RoleNavigation.modulesFor(session.user, now);
     final current = AppRoutes.moduleForLocation(location);
 
@@ -39,10 +51,11 @@ class DashboardShell extends ConsumerWidget {
       appBar: AppBar(
         title: const AppBarLogo(),
         actions: [
-          const Padding(
-            padding: EdgeInsets.only(right: AppSpacing.xs),
-            child: Center(child: EnvironmentBadge()),
+          Padding(
+            padding: const EdgeInsets.only(right: AppSpacing.xs),
+            child: Center(child: EnvironmentBadge(compact: MediaQuery.sizeOf(context).width < 400)),
           ),
+          const NotificationBell(),
           IconButton(
             key: const Key('account-button'),
             tooltip: 'My account',

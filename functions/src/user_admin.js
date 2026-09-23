@@ -46,15 +46,27 @@ export const NotificationType = Object.freeze({
   roleChanged: 'role_changed',
   temporaryPermissionGranted: 'temporary_permission_granted',
   temporaryPermissionExpiring: 'temporary_permission_expiring',
+  // Phase 9: security notice to the person whose password was reset.
+  passwordReset: 'password_reset',
   // Phase 4
   workOrderAssigned: 'job_assigned',
+  // Phase 9: the previous worker / the assigned worker / the job's creator.
+  workOrderReassigned: 'job_reassigned',
+  workOrderCancelled: 'job_cancelled',
+  jobReadyToInvoice: 'job_ready_to_invoice',
   loyaltyRewardUnlocked: 'loyalty_reward_unlocked',
   // Phase 5
   recurringExpenseDue: 'recurring_expense_due',
   lowStock: 'inventory_low_stock',
+  // Phase 9: expense workflow and reconciliation differences.
+  expenseAwaitingApproval: 'expense_awaiting_approval',
+  expenseDecided: 'expense_decided',
+  reconciliationDifference: 'reconciliation_difference',
   // Phase 6
   attendanceReview: 'attendance_review',
   attendanceRejected: 'attendance_rejected',
+  // Phase 9: the staff member whose attendance was corrected.
+  attendanceCorrected: 'attendance_corrected',
   allowanceAwaitingApproval: 'allowance_awaiting_approval',
   allowanceApproved: 'allowance_approved',
   payrollReview: 'payroll_review',
@@ -69,6 +81,8 @@ export const NotificationType = Object.freeze({
   afterHoursExpiring: 'after_hours_expiring',
   cashHandoverPending: 'cash_handover_pending',
   cashHandoverSubmitted: 'cash_handover_submitted',
+  // Phase 9: scheduled reminder for a handover still open after HANDOVER_REMINDER_MS.
+  cashHandoverReminder: 'cash_handover_reminder',
   cashDiscrepancyDetected: 'cash_discrepancy_detected',
   cashDiscrepancyResolved: 'cash_discrepancy_resolved',
   // Phase 7: generic texts only - never a name, share count or amount.
@@ -582,6 +596,8 @@ export async function resetUserPassword(deps, callerUid, rawData, now = Date.now
     });
   });
   await auth.revokeRefreshTokens(uid);
+  // Phase 9: tell the account holder (generic text; never the password).
+  await notifySafely(deps, uid, NotificationType.passwordReset, uid);
   return { uid, temporaryPassword };
 }
 
@@ -922,6 +938,41 @@ export async function linkStaff(deps, callerUid, rawData, now = Date.now()) {
 // stale index entries removed) and sends "ending soon" notices.
 
 export const EXPIRY_WARNING_MS = 30 * 60_000;
+
+// ---------------------------------------------------------------------------
+// Notification preferences (Phase 9)
+// ---------------------------------------------------------------------------
+
+/**
+ * The caller mutes or unmutes PUSH for their own non-critical categories.
+ * In-app notifications are always kept; critical categories (access, pay)
+ * cannot be muted. Stored server-side so the profile's self-update rule does
+ * not need to widen.
+ */
+export async function updateNotificationPreferences(deps, callerUid, rawData, now = Date.now()) {
+  const { db } = deps;
+  const data = requireObject(rawData);
+  const input = requireObject(data.preferences);
+  const { MUTABLE_CATEGORIES } = await import('./notify.js');
+  const entries = Object.entries(input);
+  if (entries.length === 0) throw invalid('Choose at least one setting.', 'preferences');
+  for (const [k, v] of entries) {
+    if (!MUTABLE_CATEGORIES.includes(k)) throw invalid('That notification category cannot be changed.', 'category');
+    if (typeof v !== 'boolean') throw invalid('Choose on or off.', 'preferences');
+  }
+  return db.runTransaction(async (tx) => {
+    const ref = db.collection(USERS).doc(callerUid);
+    const actor = actorFrom(callerUid, await tx.get(ref), now);
+    const before = actor.data.notificationPreferences ?? {};
+    const next = { ...before, ...Object.fromEntries(entries) };
+    tx.update(ref, { notificationPreferences: next, updatedAt: FieldValue.serverTimestamp() });
+    audit(tx, db, actor, 'notification_preferences.updated', callerUid, {
+      previousValue: Object.fromEntries(entries.map(([k]) => [k, before[k] ?? true])),
+      newValue: Object.fromEntries(entries),
+    });
+    return { preferences: next };
+  });
+}
 
 export async function sweepTemporaryGrants(deps, now = Date.now()) {
   const { db } = deps;

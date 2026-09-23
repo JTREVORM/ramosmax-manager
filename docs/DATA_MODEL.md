@@ -295,3 +295,18 @@ Single-field indexes also serve `worker_orders.serviceIntakeId`, `payments.recei
 - **Customers:** see CUSTOMERS_AND_VEHICLES.md. Name search uses word-prefix tokens with a limit of 30.
 - **Services:** the catalogue is small reference data, loaded once, kept in the offline cache and filtered on the
   device.
+
+## Phase 9
+
+Phase 9 adds **no collection**. Changes to existing documents:
+
+- **`notifications/{id}`:**
+  - the ID is now deterministic (recipient, type, record, 10-minute window) for de-duplication;
+  - new fields: `category`, `critical`, and `push` (`status`, `successCount`, `failureCount`, `removedTokens`,
+    `reason`). The last is written by the server after sending;
+  - a client may still change only `read`, `readAt` and `updatedAt`.
+- **`users/{uid}.notificationPreferences`:** `{category: bool}`, push on or off per mutable category, written only by
+  `updateNotificationPreferences`.
+- **`cash_handovers/{id}.reminderSentAt`:** set once by the scheduled reminder.
+- **Reports** read existing collections only (REPORTS.md) and write nothing.
+- **Indexes:** none added (65 composite, no duplicates; see PRODUCTION_READINESS.md §3).

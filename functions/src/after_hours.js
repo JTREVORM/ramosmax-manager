@@ -923,6 +923,8 @@ export async function resolveCashDiscrepancy(deps, callerUid, rawData, now = Dat
 // by themselves and every function checks the window against the server clock.
 
 export const EXPIRY_WARNING_MS = 30 * 60_000;
+/** Phase 9: a cash handover still open this long after its session closed is reminded once. */
+export const HANDOVER_REMINDER_MS = 2 * 3600_000;
 
 export async function sweepAfterHours(deps, now = Date.now()) {
   const { db } = deps;
@@ -946,5 +948,33 @@ export async function sweepAfterHours(deps, now = Date.now()) {
     await notifySafely(deps, d.get('staffUid'), NotificationType.afterHoursExpiring, d.id);
     warned++;
   }
-  return { expired, warned };
+  // Phase 9: a handover still open after HANDOVER_REMINDER_MS gets ONE reminder
+  // (the flag is set in a transaction, so an overlapping or retried sweep
+  // cannot remind twice). Uses the (status, createdAt desc) index.
+  let reminded = 0;
+  const receivers = [];
+  let receiversLoaded = false;
+  for (const status of ['pending', 'submitted']) {
+    const open = await db.collection(HANDOVERS).where('status', '==', status).orderBy('createdAt', 'desc').limit(200).get();
+    for (const d of open.docs) {
+      const created = ms(d.get('createdAt'));
+      if (created == null || created > now - HANDOVER_REMINDER_MS || d.get('reminderSentAt')) continue;
+      const claimed = await db.runTransaction(async (tx) => {
+        const s = await tx.get(d.ref);
+        if (!s.exists || s.get('reminderSentAt') || !['pending', 'submitted'].includes(s.get('status'))) return false;
+        tx.update(d.ref, { reminderSentAt: nowTs, updatedAt: stamp() });
+        return true;
+      });
+      if (!claimed) continue;
+      if (!receiversLoaded) {
+        receivers.push(...await holdersOf(db, ['cash_handover.approve'], now));
+        receiversLoaded = true;
+      }
+      const staffUid = d.get('staffUid');
+      if (status === 'pending') await notifySafely(deps, staffUid, NotificationType.cashHandoverReminder, d.id);
+      for (const uid of receivers) if (uid !== staffUid) await notifySafely(deps, uid, NotificationType.cashHandoverReminder, d.id);
+      reminded++;
+    }
+  }
+  return { expired, warned, reminded };
 }

@@ -495,10 +495,10 @@ describe('housekeeping', () => {
   test('the sweep marks expired authorisations and sends one "ending soon" notice', async () => {
     const a = await authorize('wkr', 'mgr', { expiresAt: NOW + 20 * 60_000 });
     let r = await ah.sweepAfterHours(deps, NOW);
-    assert.deepEqual(r, { expired: 0, warned: 1 });
+    assert.deepEqual(r, { expired: 0, warned: 1, reminded: 0 });
     assert.ok(sent.some((n) => n.type === 'after_hours_expiring' && n.uid === 'wkr'));
     r = await ah.sweepAfterHours(deps, NOW + H);
-    assert.deepEqual(r, { expired: 1, warned: 0 });
+    assert.deepEqual(r, { expired: 1, warned: 0, reminded: 0 });
     assert.equal((await doc(`after_hours_access/${a.authorizationId}`)).status, 'expired');
     assert.equal((await admin.sweepTemporaryGrants(deps, NOW)).warned, 0, 'no per-permission notices for after-hours grants');
   });

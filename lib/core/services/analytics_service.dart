@@ -110,6 +110,11 @@ abstract final class AnalyticsEvents {
   // Phase 8 - never a name or amount; `outcome` holds only an action key.
   static const String afterHoursAction = 'after_hours_action';
 
+  // Phase 9 - `count` is the number of categories changed; `outcome` holds a report key.
+  static const String notificationPreferencesChanged = 'notification_preferences_changed';
+  static const String reportViewed = 'report_viewed';
+  static const String reportExported = 'report_exported';
+
   static const Set<String> all = {
     signInSucceeded, signInFailed, passwordChanged, passwordReset, sessionStarted, accessDenied, signedOut,
     userManagementOpened, userCreated, userRoleChanged, userActivated, userDeactivated,
@@ -121,6 +126,7 @@ abstract final class AnalyticsEvents {
     attendanceAction, allowanceAction, payrollAction, lossAction,
     shareholderAction, shareAction, dividendAction,
     afterHoursAction,
+    notificationPreferencesChanged, reportViewed, reportExported,
   };
 
   static const Set<String> allowedParams = {'role', 'reason', 'country', 'resend', 'failure_kind', 'outcome', 'count'};

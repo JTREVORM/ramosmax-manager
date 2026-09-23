@@ -101,6 +101,7 @@ class OperationsRepository {
   Stream<List<CatalogService>> watchServices() => _db
       .collection(FirestoreCollections.services)
       .orderBy('name')
+      .limit(500)
       .snapshots()
       .map((s) => [for (final d in s.docs) CatalogService.fromFirestore(d.id, d.data())]);
 

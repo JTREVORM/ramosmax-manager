@@ -16,4 +16,13 @@ class AuditLogRepository {
 
   Future<void> record(AuditLogEntry entry) =>
       _db.collection(FirestoreCollections.auditLogs).add(entry.toFirestore());
+
+  /// Phase 9: the audit trail for audit.view holders, newest first, bounded.
+  /// Index: (module, timestamp desc) when filtered by module.
+  Stream<List<AuditRecord>> watchLogs({String? module, int limit = 100}) {
+    Query<Map<String, dynamic>> q = _db.collection(FirestoreCollections.auditLogs);
+    if (module != null) q = q.where('module', isEqualTo: module);
+    return q.orderBy('timestamp', descending: true).limit(limit).snapshots()
+        .map((s) => [for (final d in s.docs) AuditRecord.fromFirestore(d.id, d.data())]);
+  }
 }

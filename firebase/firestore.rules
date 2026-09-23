@@ -693,7 +693,12 @@ service cloud.firestore {
         && request.resource.data.userRole == role()
         && request.resource.data.timestamp == request.time
         && request.resource.data.action is string
-        && request.resource.data.module is string;
+        && request.resource.data.module is string
+        // Phase 9: only the fields the app writes (AuditLogEntry.toFirestore).
+        // A client cannot pose as the server (`source: 'cloud_function'`) or
+        // inject a reason, target or anything else.
+        && request.resource.data.keys().hasOnly(['userId', 'userRole', 'action', 'module', 'recordId',
+             'description', 'previousValue', 'newValue', 'timestamp']);
 
       allow update, delete: if false;
     }

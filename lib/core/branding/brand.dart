@@ -11,9 +11,9 @@ abstract final class Brand {
   static const String tagline = 'Automotive Care';
   static const String systemName = 'RamosMAX Management System';
 
-  // Contact details appear on future receipts, invoices and reports.
-  // TODO(business): replace with the verified company contact details before
-  // the first production release. Left empty rather than invented.
+  // Contact details appear on receipts, invoices and reports.
+  // TODO(business): confirm these contact details and supply the TIN before
+  // the first production release (the TIN is left empty rather than invented).
   static const String phone = '0748020649';
   static const String email = 'ramosmaxautomotivecare@gmail.com';
   static const String address = 'bukoto kisasi road Kampala, Uganda';

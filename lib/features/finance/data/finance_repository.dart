@@ -19,6 +19,7 @@ class FinanceRepository {
 
   /// Every account (a small collection), plus defaults not yet created.
   Stream<List<FinancialAccount>> watchAccounts() => _c(FirestoreCollections.financialAccounts)
+      .limit(100)
       .snapshots()
       .map((s) => FinancialAccount.withDefaults([for (final d in s.docs) FinancialAccount.fromFirestore(d.id, d.data())]));
 

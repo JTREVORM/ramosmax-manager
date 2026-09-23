@@ -211,3 +211,68 @@ Firestore and Storage once all active clients support it.
 - **Sensitive data:** audit values hold record numbers, amounts and statuses, never phone or identification numbers.
   Notifications carry only a type and record ID.
 - **Storage rules:** unchanged. Phase 8 stores no documents or photos.
+
+## Phase 9: final security review
+
+**Rules tightened, never loosened:**
+
+- Client-written audit entries may carry only the nine fields the app writes (`keys().hasOnly(...)`). A modified
+  client can no longer forge `source: 'cloud_function'`, a reason or a target.
+- `firebase/firestore.rules` has no other change. `firebase/storage.rules` is unchanged.
+
+**Tested as a modified client** (`functions/test/rules.test.js`, Phase 9 block):
+
+- **No direct writes:** 52 server-owned collections refuse create, update and delete from Administrator, Manager,
+  Auditor and Cashier clients alike. This covers:
+  - money: accounts, ledger, daily summaries, payments, invoices;
+  - payroll and salaries;
+  - ownership: shares, contributions, dividends;
+  - after-hours: expected cash, handovers;
+  - reconciliations, settings, counters and reservations.
+- **Notifications:** a person reads only their own; queries must filter on the recipient; only `read` / `readAt` may
+  change; nobody creates, deletes, or reads another's inbox (Administrators included).
+- **Own profile:** only session fields may change (last login, device tokens). Preferences, role, permissions, denials
+  and credential flags cannot be written, and nobody may write another person's tokens.
+- **Signed-out clients** read nothing, anywhere.
+
+**Storage rules** (`functions/test/storage_rules.test.js`):
+
+- **Tested on the emulator:**
+  - signed-out access is denied;
+  - unknown paths are denied, even to Administrators;
+  - evidence and staff documents can never be deleted.
+- **Role-based cases** (who may upload or read which evidence) need the rules' Firestore profile look-up, which this
+  environment's Storage emulator cannot evaluate. It denies them, so the rules fail closed. These cases are written
+  and skipped with the reason, and must be checked on the deployed development project (PRODUCTION_READINESS.md
+  item 41).
+
+**Server-side protections verified:**
+
+- **Callable authorisation:**
+  - every one of the 124 signed-in callables re-checks the caller inside its transaction (active, permission, target
+    rank);
+  - `getBusinessReport` checks the report and each section;
+  - `updateNotificationPreferences` only ever touches the caller's own profile and refuses critical categories.
+- **Temporary permissions:** they expire by time in the rules and in every function. Revocation is immediate.
+  After-hours-only permissions cannot be granted permanently or through the generic grant (Phase 8 tests). The Phase 9
+  menus appear only while grants are live.
+- **Financial integrity under concurrency** (`functions/test/integrity.test.js`), with simultaneous requests:
+  - two payments cannot overpay an invoice;
+  - a double-tapped payment is recorded once, and a raced reversal happens once;
+  - an expense is approved and paid once;
+  - stock never goes below zero, and always equals the sum of its movements;
+  - a handover is counted by one receiver only;
+  - one session opens per worker;
+  - one assignment and one completion per job;
+  - the ledger stays consistent throughout.
+- **Errors:**
+  - server messages written for users are shown as they are;
+  - anything else becomes a generic message, so there are no stack traces or paths (tested);
+  - a request whose answer was lost is reported as "may already have been saved", never "failed". Retrying is safe
+    because money commands carry a `requestId`.
+- **Secrets:**
+  - the only server secret (`RAMOSMAX_AUTH_API_KEY`) is in Secret Manager;
+  - no keystore, key file, `.env` or service-account JSON is tracked;
+  - `google-services.json` and `firebase_options_*.dart` are public client configuration.
+- **App Check** is not enforced yet (`enforceAppCheck: false`). Recommended after Play Integrity and DeviceCheck are
+  registered. Access control does not depend on it.

@@ -1,6 +1,7 @@
+import 'dart:async';
 import 'dart:math';
 
-import 'package:cloud_functions/cloud_functions.dart' show FirebaseFunctions, HttpsCallableOptions;
+import 'package:cloud_functions/cloud_functions.dart' show FirebaseFunctions, FirebaseFunctionsException, HttpsCallableOptions;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../errors/app_failure.dart';
@@ -20,9 +21,30 @@ Future<Result<Map<String, dynamic>>> callFunction(
     final raw = result.data;
     return Success(raw is Map ? raw.map((k, v) => MapEntry(k.toString(), v)) : <String, dynamic>{});
   } catch (e) {
-    return Failure(ErrorMapper.map(e));
+    return Failure(callFailure(e));
   }
 }
+
+/// Phase 9: how a failed call is reported. When the request left the device
+/// but no answer came back, the server may have finished it - so it is never
+/// called "failed", only unconfirmed. Retrying is safe: money commands carry a
+/// requestId and status changes refuse to run twice.
+AppFailure callFailure(Object error) {
+  if (error is TimeoutException ||
+      (error is FirebaseFunctionsException && (error.code == 'deadline-exceeded' || error.code == 'unavailable'))) {
+    return unconfirmedFailure;
+  }
+  return ErrorMapper.map(error);
+}
+
+/// Shown when a command was sent but its result never arrived.
+const AppFailure unconfirmedFailure = AppFailure(
+  FailureKind.network,
+  'No answer from the server. It may already have been saved - check before repeating it. '
+  'Trying again is safe: the same request is never recorded twice.',
+  code: 'unconfirmed',
+  retryable: true,
+);
 
 /// Shown when a write is attempted offline. Writes are never queued: money,
 /// numbers and statuses need the server.

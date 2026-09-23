@@ -90,7 +90,10 @@ class BrandHeader extends StatelessWidget {
 /// Visible marker on every non-production build so test data is never
 /// mistaken for real business data. Renders nothing in production.
 class EnvironmentBadge extends ConsumerWidget {
-  const EnvironmentBadge({super.key});
+  const EnvironmentBadge({super.key, this.compact = false});
+
+  /// Short label for crowded app bars on small phones (Phase 9).
+  final bool compact;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -102,9 +105,9 @@ class EnvironmentBadge extends ConsumerWidget {
         color: Brand.gold,
         borderRadius: BorderRadius.circular(999),
       ),
-      child: const Text(
-        'DEVELOPMENT · TEST DATA',
-        style: TextStyle(
+      child: Text(
+        compact ? 'DEV · TEST' : 'DEVELOPMENT · TEST DATA',
+        style: const TextStyle(
           color: Brand.purpleDeep,
           fontSize: 11,
           fontWeight: FontWeight.w800,

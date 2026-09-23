@@ -185,10 +185,12 @@ export async function createExpense(deps, callerUid, rawData, now = Date.now()) 
   const requestId = requireRequestId(data.requestId);
   const status = data.submit === true ? 'pending_review' : 'draft';
 
-  return db.runTransaction(async (tx) => {
+  let fresh = false;
+  const result = await db.runTransaction(async (tx) => {
     const actor = await freshActor(tx, db, callerUid, now, 'expenses.create');
     const request = await readRequest(tx, db, requestId, actor.uid, 'expense');
     if (request.earlier) return request.earlier;
+    fresh = true;
     const category = await readCategory(tx, db, input.categoryId);
     const numbers = await readCounter(tx, db, 'expenses', 'RMX-EXP-', 6);
     const ref = db.collection(EXPENSES).doc();
@@ -202,6 +204,15 @@ export async function createExpense(deps, callerUid, rawData, now = Date.now()) 
     });
     return result;
   });
+  if (fresh && result.status === 'pending_review') await notifyReviewers(deps, result.expenseId, callerUid, now);
+  return result;
+}
+
+/** Phase 9: reviewers and approvers hear about an expense waiting for them (not its author). */
+async function notifyReviewers(deps, expenseId, exceptUid, now) {
+  for (const uid of await holdersOf(deps.db, ['expenses.review', 'expenses.approve'], now)) {
+    if (uid !== exceptUid) await notifySafely(deps, uid, NotificationType.expenseAwaitingApproval, expenseId);
+  }
 }
 
 /** Changes an expense that nobody has reviewed yet. Money never moves here. */
@@ -251,9 +262,11 @@ export async function updateExpenseStatus(deps, callerUid, rawData, now = Date.n
   const reason = requireReason(data.reason, { required: Boolean(rule.reason) });
   const notes = optionalText(data.notes, 'Notes', 500);
 
-  return db.runTransaction(async (tx) => {
+  let author = null;
+  const result = await db.runTransaction(async (tx) => {
     const actor = await freshActor(tx, db, callerUid, now, ...rule.permissions);
     const { ref, expense } = await readExpense(tx, db, data.expenseId);
+    author = expense.createdBy ?? null;
     if (!rule.from.includes(expense.status)) {
       throw precondition(expense.status === 'paid' ? 'This expense has already been paid.' : `This expense is ${expense.status.replace('_', ' ')}.`, 'invalid_status');
     }
@@ -277,6 +290,12 @@ export async function updateExpenseStatus(deps, callerUid, rawData, now = Date.n
     });
     return { expenseId: ref.id, status: update.status ?? expense.status };
   });
+  // Phase 9: submitted → reviewers; approved / rejected → the person who recorded it.
+  if (action === 'submit') await notifyReviewers(deps, result.expenseId, callerUid, now);
+  if ((action === 'approve' || action === 'reject') && author && author !== callerUid) {
+    await notifySafely(deps, author, NotificationType.expenseDecided, result.expenseId);
+  }
+  return result;
 }
 
 /** The only step that moves money: account −amount, expense PAID, ledger entry - atomically. */
@@ -287,7 +306,8 @@ export async function payExpense(deps, callerUid, rawData, now = Date.now()) {
   const reference = optionalText(data.reference, 'Payment reference', 60);
   const at = requireBusinessDate(data.paymentDate, now, { field: 'payment date' });
 
-  return db.runTransaction(async (tx) => {
+  let paidFor = null;
+  const out = await db.runTransaction(async (tx) => {
     const actor = await freshActor(tx, db, callerUid, now, 'expenses.pay');
     const request = await readRequest(tx, db, requestId, actor.uid, 'expense_payment');
     if (request.earlier) return request.earlier;
@@ -317,8 +337,12 @@ export async function payExpense(deps, callerUid, rawData, now = Date.now()) {
       previousValue: { status: 'approved' },
       newValue: { status: 'paid', amountUgx: expense.amountUgx, accountId, transactionNumber: r.transactionNumber },
     });
+    paidFor = expense.createdBy && expense.createdBy !== actor.uid ? expense.createdBy : null;
     return result;
   });
+  // Phase 9: the person who recorded the expense hears it was paid.
+  if (paidFor) await notifySafely(deps, paidFor, NotificationType.expenseDecided, out.expenseId);
+  return out;
 }
 
 // ---------------------------------------------------------------------------

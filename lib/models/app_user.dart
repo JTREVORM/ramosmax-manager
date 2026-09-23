@@ -85,6 +85,7 @@ class AppUser {
     this.createdBy,
     this.updatedBy,
     this.lastLoginAt,
+    this.notificationPreferences = const {},
   });
 
   final String uid;
@@ -148,6 +149,10 @@ class AppUser {
   final String? createdBy;
   final String? updatedBy;
   final DateTime? lastLoginAt;
+
+  /// Phase 9: push on/off per notification category (absent = on). Written
+  /// only by the updateNotificationPreferences function.
+  final Map<String, bool> notificationPreferences;
 
   String get displayName =>
       (fullName != null && fullName!.trim().isNotEmpty) ? fullName!.trim() : phoneNumber;
@@ -238,6 +243,10 @@ class AppUser {
       createdBy: data['createdBy'] as String?,
       updatedBy: data['updatedBy'] as String?,
       lastLoginAt: FirestoreConverters.toDateTime(data['lastLoginAt']),
+      notificationPreferences: {
+        for (final e in ((data['notificationPreferences'] as Map?) ?? const {}).entries)
+          if (e.value is bool) e.key.toString(): e.value as bool,
+      },
     );
   }
 

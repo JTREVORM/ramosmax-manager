@@ -43,6 +43,7 @@ import * as losses from './losses.js';
 import * as loyalty from './loyalty.js';
 import * as ops from './operations.js';
 import * as payroll from './payroll.js';
+import * as reports from './reports.js';
 import * as session from './session.js';
 import * as shareholders from './shareholders.js';
 import * as shares from './shares.js';
@@ -107,6 +108,8 @@ export const setUserPermissions = callable('setUserPermissions', admin.setUserPe
 export const grantTemporaryPermission = callable('grantTemporaryPermission', admin.grantTemporaryPermission);
 export const revokeTemporaryPermission = callable('revokeTemporaryPermission', admin.revokeTemporaryPermission);
 export const linkStaff = callable('linkStaff', admin.linkStaff);
+// Phase 9: a person's own push preferences (critical notices cannot be muted).
+export const updateNotificationPreferences = callable('updateNotificationPreferences', admin.updateNotificationPreferences);
 
 // Customers, vehicles, service catalogue and service intake (Phase 3).
 export const createCustomer = callable('createCustomer', ops.createCustomer);
@@ -218,6 +221,9 @@ export const updateDividendStatus = callable('updateDividendStatus', dividends.u
 export const payDividend = callable('payDividend', dividends.payDividend);
 export const reverseDividendPayment = callable('reverseDividendPayment', dividends.reverseDividendPayment);
 export const cancelDividend = callable('cancelDividend', dividends.cancelDividend);
+
+// Reports (Phase 9): read-only, permission-controlled, server-calculated.
+export const getBusinessReport = callable('getBusinessReport', reports.getBusinessReport);
 
 // After-hours operations and cash handovers (Phase 8).
 export const authorizeAfterHours = callable('authorizeAfterHours', afterHours.authorizeAfterHours);

@@ -308,3 +308,20 @@ No ledger type, account or revenue path was added.
   customer payments (`use_payment_reversal`).
 
 See CASH_HANDOVERS.md.
+
+## Phase 9: reports
+
+The Reports module (REPORTS.md) reads the same authoritative sources as this module: `finance_daily_summaries`
+(written by the ledger in the same transaction as each entry), `financial_accounts` and the payment records. It
+**stores no second copy of any total**.
+
+- **Revenue** is customer payments net of reversals.
+- **Not revenue**, listed separately:
+  - share capital;
+  - transfers and deposits;
+  - opening balances and adjustments;
+  - after-hours handovers.
+- **Expenses:** operating expenses are kept apart from inventory purchases, staff pay and dividends.
+
+A reversed payment is counted once, as reversed, and excluded from net. Everything above is tested in
+`functions/test/reports.test.js`. The Phase 5 **Finance → Reports** screen is unchanged.

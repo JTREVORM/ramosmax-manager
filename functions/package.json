@@ -10,7 +10,7 @@
   "scripts": {
     "test:unit": "node --test test/access.test.js",
     "test:emulated": "node --test --test-concurrency=1 \"test/*.test.js\"",
-    "test": "firebase emulators:exec --project demo-ramosmax --only auth,firestore \"npm run test:emulated\"",
+    "test": "firebase emulators:exec --project demo-ramosmax --only auth,firestore,storage \"npm run test:emulated\"",
     "deploy:dev": "firebase deploy --project development --only functions",
     "deploy:prod": "firebase deploy --project production --only functions"
   },

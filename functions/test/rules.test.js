@@ -841,3 +841,77 @@ describe('after-hours operations and cash handovers (Phase 8)', () => {
     }
   });
 });
+
+// ===========================================================================
+// Phase 9: a modified client against every server-owned collection,
+// notifications isolation, forged audit entries, profile field injection.
+// ===========================================================================
+describe('Phase 9: modified-client hardening', () => {
+  const SERVER_OWNED = [
+    'staff', 'customers', 'vehicles', 'services', 'service_intakes', 'worker_orders', 'invoices', 'discounts', 'payments', 'receipts',
+    'loyalty_accounts', 'loyalty_transactions', 'loyalty_rewards', 'loyalty_events', 'financial_accounts', 'finance_daily_summaries',
+    'financial_transactions', 'bank_deposits', 'reconciliations', 'expenses', 'expense_categories', 'recurring_expenses', 'inventory_items',
+    'suppliers', 'stock_movements', 'inventory_purchases', 'attendance', 'attendance_corrections', 'worker_allowances', 'salary_profiles',
+    'salary_history', 'payroll', 'payroll_items', 'salary_deductions', 'loss_incidents', 'shareholders', 'share_classes', 'shareholdings',
+    'share_transactions', 'share_contributions', 'share_register', 'dividends', 'dividend_allocations', 'after_hours_access',
+    'after_hours_sessions', 'after_hours_cash', 'cash_handovers', 'cash_discrepancies', 'settings', 'counters', 'unique_keys', 'login_throttle',
+  ];
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      for (const c of SERVER_OWNED) await setDoc(doc(db, `${c}/existing`), { amountUgx: 1000, status: 'posted' });
+      await setDoc(doc(db, 'notifications/mine'), { recipientId: 'worker', type: 'job_assigned', title: 'T', body: 'B', read: false, push: { status: 'sent' } });
+      await setDoc(doc(db, 'notifications/theirs'), { recipientId: 'cashier', type: 'payroll_paid', title: 'T', body: 'B', read: false });
+    });
+  });
+
+  test('no role - Administrator included - can create, change or delete any server-owned record', async () => {
+    for (const uid of ['admin', 'manager', 'auditor', 'cashier']) {
+      const db = as(uid);
+      for (const c of SERVER_OWNED) {
+        await assertFails(setDoc(doc(db, `${c}/forged`), { amountUgx: 1, status: 'paid' }), `${uid} create ${c}`);
+        await assertFails(updateDoc(doc(db, `${c}/existing`), { amountUgx: 999_999_999 }), `${uid} update ${c}`);
+        await assertFails(deleteDoc(doc(db, `${c}/existing`)), `${uid} delete ${c}`);
+      }
+    }
+  });
+
+  test('notifications: my own only; I may only mark them read', async () => {
+    await assertSucceeds(getDoc(doc(as('worker'), 'notifications/mine')));
+    await assertFails(getDoc(doc(as('worker'), 'notifications/theirs')));
+    await assertFails(getDocs(collection(as('worker'), 'notifications')), 'a query must filter on recipientId');
+    await assertSucceeds(getDocs(query(collection(as('worker'), 'notifications'), where('recipientId', '==', 'worker'))));
+    await assertFails(getDocs(query(collection(as('admin'), 'notifications'), where('recipientId', '==', 'worker'))), 'not even an admin reads another inbox');
+    await assertSucceeds(updateDoc(doc(as('worker'), 'notifications/mine'), { read: true, readAt: serverTimestamp() }));
+    await assertFails(updateDoc(doc(as('worker'), 'notifications/mine'), { push: { status: 'failed' } }));
+    await assertFails(updateDoc(doc(as('worker'), 'notifications/mine'), { recipientId: 'cashier' }));
+    await assertFails(updateDoc(doc(as('worker'), 'notifications/theirs'), { read: true }));
+    await assertFails(addDoc(collection(as('worker'), 'notifications'), { recipientId: 'cashier', type: 'x', title: 'Pay me', body: 'now' }));
+    await assertFails(deleteDoc(doc(as('worker'), 'notifications/mine')));
+  });
+
+  test('audit entries: a client cannot pose as the server or inject fields', async () => {
+    const base = { userId: 'worker', userRole: 'worker', action: 'session.sign_in', module: 'auth', timestamp: serverTimestamp() };
+    await assertSucceeds(addDoc(collection(as('worker'), 'audit_logs'), { ...base, recordId: null, description: null }));
+    await assertFails(addDoc(collection(as('worker'), 'audit_logs'), { ...base, source: 'cloud_function' }));
+    await assertFails(addDoc(collection(as('worker'), 'audit_logs'), { ...base, reason: 'Approved by the Administrator' }));
+    await assertFails(addDoc(collection(as('worker'), 'audit_logs'), { ...base, targetUserId: 'admin' }));
+  });
+
+  test('own profile: session fields only - no preferences, role, permissions or credential flags', async () => {
+    const me = doc(as('worker'), 'users/worker');
+    await assertSucceeds(updateDoc(me, { fcmTokens: ['token-1'], updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(me, { notificationPreferences: { access: false } }), 'preferences go through the server');
+    await assertFails(updateDoc(me, { role: 'admin' }));
+    await assertFails(updateDoc(me, { active: true, deniedPermissions: [] }));
+    await assertFails(updateDoc(me, { mustChangePassword: false }));
+    await assertFails(updateDoc(doc(as('worker'), 'users/cashier'), { fcmTokens: ['stolen'] }), 'another person\'s tokens');
+  });
+
+  test('signed-out clients read nothing anywhere', async () => {
+    const anon = env.unauthenticatedContext().firestore();
+    for (const c of [...SERVER_OWNED, 'users', 'notifications', 'audit_logs']) await assertFails(getDocs(collection(anon, c)), c);
+  });
+});
+

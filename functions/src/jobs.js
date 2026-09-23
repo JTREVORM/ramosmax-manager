@@ -380,17 +380,21 @@ export async function reassignWorkerOrder(deps, callerUid, rawData, now = Date.n
       newValue: { workerId: worker.uid, status: 'assigned' },
       reason,
     });
-    return { workerOrderId: ref.id, status: 'assigned', workerId: worker.uid };
+    return { workerOrderId: ref.id, status: 'assigned', workerId: worker.uid, previousWorkerId: order.workerId ?? null };
   });
   await notifySafely(deps, result.workerId, NotificationType.workOrderAssigned, result.workerOrderId);
-  return result;
+  // Phase 9: the previous worker learns the job is no longer theirs.
+  if (result.previousWorkerId) await notifySafely(deps, result.previousWorkerId, NotificationType.workOrderReassigned, result.workerOrderId);
+  const { previousWorkerId, ...out } = result;
+  return out;
 }
 
 export async function cancelWorkerOrder(deps, callerUid, rawData, now = Date.now()) {
   const { db } = deps;
   const data = requireObject(rawData);
   const reason = requireReason(data.reason);
-  return db.runTransaction(async (tx) => {
+  let notifyWorker = null;
+  const result = await db.runTransaction(async (tx) => {
     const actor = await freshActor(tx, db, callerUid, now, 'jobs.manage');
     const { ref, order, intakeRef, intake } = await readOrderAndIntake(tx, db, data.workerOrderId);
     if (order.status === 'completed' || order.status === 'cancelled') {
@@ -401,8 +405,12 @@ export async function cancelWorkerOrder(deps, callerUid, rawData, now = Date.now
     tx.update(intakeRef, intakeUpdate(intake, withSummary(intake, { ...order, ...upd }), actor.uid));
     audit(tx, db, actor, 'jobs', 'work_order.cancelled', ref.id,
       { previousValue: { status: order.status }, newValue: { status: 'cancelled' }, reason });
+    notifyWorker = order.workerId && order.workerId !== actor.uid ? order.workerId : null;
     return { workerOrderId: ref.id, status: 'cancelled' };
   });
+  // Phase 9: the assigned worker learns the job was cancelled.
+  if (notifyWorker) await notifySafely(deps, notifyWorker, NotificationType.workOrderCancelled, result.workerOrderId);
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -417,7 +425,8 @@ export async function updateWorkerOrderStatus(deps, callerUid, rawData, now = Da
   const reason = requireReason(data.reason, { required: Boolean(rule.reason) });
   const completionNotes = data.action === 'complete' ? optionalText(data.completionNotes, 'Completion notes', 500) : null;
 
-  return db.runTransaction(async (tx) => {
+  let ready = null;
+  const result = await db.runTransaction(async (tx) => {
     const actor = await freshActor(tx, db, callerUid, now, 'jobs.complete');
     const { ref, order, intakeRef, intake } = await readOrderAndIntake(tx, db, data.workerOrderId);
     // Phase 8: work completed in a live after-hours session is marked as such.
@@ -445,8 +454,14 @@ export async function updateWorkerOrderStatus(deps, callerUid, rawData, now = Da
     audit(tx, db, actor, 'jobs', rule.event, ref.id, {
       previousValue: { status: order.status }, newValue: { status: rule.to }, reason,
     });
-    return { workerOrderId: ref.id, status: rule.to, jobStatus: jobStatusFor(withSummary(intake, { ...order, ...upd })) };
+    const jobStatus = jobStatusFor(withSummary(intake, { ...order, ...upd }));
+    // Phase 9: the person who started the job hears when it is ready to invoice.
+    ready = jobStatus === 'completed' && jobStatusFor(intake.orders ?? []) !== 'completed' && intake.createdBy && intake.createdBy !== callerUid
+      ? { uid: intake.createdBy, intakeId: intakeRef.id } : null;
+    return { workerOrderId: ref.id, status: rule.to, jobStatus };
   });
+  if (ready) await notifySafely(deps, ready.uid, NotificationType.jobReadyToInvoice, ready.intakeId);
+  return result;
 }
 
 /** Worked time: start → completion (or now), minus pauses. */

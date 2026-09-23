@@ -80,6 +80,8 @@ class AuditRecord {
     required this.userId,
     required this.action,
     this.userRole,
+    this.module,
+    this.recordId,
     this.description,
     this.reason,
     this.previousValue,
@@ -93,6 +95,10 @@ class AuditRecord {
   final String userId;
   final UserRole? userRole;
   final String action;
+
+  /// Module key (`finance`, `payroll`, `sales`...) and the record acted on.
+  final String? module;
+  final String? recordId;
   final String? description;
   final String? reason;
   final Map<String, dynamic>? previousValue;
@@ -104,6 +110,8 @@ class AuditRecord {
         userId: data['userId'] as String? ?? 'unknown',
         userRole: UserRole.tryParse(data['userRole'] as String?),
         action: data['action'] as String? ?? 'unknown',
+        module: data['module'] as String?,
+        recordId: data['recordId'] as String?,
         description: data['description'] as String?,
         reason: data['reason'] as String?,
         previousValue: _map(data['previousValue']),

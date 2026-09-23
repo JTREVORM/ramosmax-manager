@@ -97,6 +97,10 @@ abstract final class AppRoutes {
   static String dividendDetail(String id) => '$dividends/$id';
   static const String myShareholding = '$home/my-shares';
 
+  // The signed-in person's notifications and push preferences (Phase 9).
+  static const String notifications = '$home/notifications';
+  static const String notificationSettings = '$notifications/settings';
+
   // After-hours work and cash handovers (Phase 8). Supervisors' screens under
   // `after-hours`, the worker's own under `my-after-hours`; each screen checks
   // the finer permission it needs.

@@ -52,6 +52,17 @@ abstract final class NotificationTypes {
   static const String cashHandoverSubmitted = 'cash_handover_submitted';
   static const String cashDiscrepancyDetected = 'cash_discrepancy_detected';
   static const String cashDiscrepancyResolved = 'cash_discrepancy_resolved';
+
+  // Phase 9 - notify.js. Generic text only.
+  static const String passwordReset = 'password_reset';
+  static const String jobReassigned = 'job_reassigned';
+  static const String jobCancelled = 'job_cancelled';
+  static const String jobReadyToInvoice = 'job_ready_to_invoice';
+  static const String expenseAwaitingApproval = 'expense_awaiting_approval';
+  static const String expenseDecided = 'expense_decided';
+  static const String reconciliationDifference = 'reconciliation_difference';
+  static const String attendanceCorrected = 'attendance_corrected';
+  static const String cashHandoverReminder = 'cash_handover_reminder';
 }
 
 /// Background handler — must be a top-level function. Phase 1 performs no
@@ -83,6 +94,28 @@ class NotificationService {
 
   Stream<RemoteMessage> get foregroundMessages => FirebaseMessaging.onMessage;
   Stream<RemoteMessage> get openedFromNotification => FirebaseMessaging.onMessageOpenedApp;
+
+  /// Phase 9: notifications the person tapped - the one that launched the
+  /// app (if any), then every tap while it runs. Payloads carry only `type`,
+  /// `recordId` and `notificationId`. Never throws: without Firebase (tests,
+  /// web) the stream is simply empty.
+  Stream<NotificationTap> taps() async* {
+    if (kIsWeb) return;
+    RemoteMessage? initial;
+    try {
+      initial = await _messaging.getInitialMessage();
+    } catch (_) {
+      return;
+    }
+    if (initial != null) yield NotificationTap.fromData(initial.data);
+    Stream<RemoteMessage> opened;
+    try {
+      opened = FirebaseMessaging.onMessageOpenedApp;
+    } catch (_) {
+      return;
+    }
+    yield* opened.map((m) => NotificationTap.fromData(m.data)).handleError((Object _) {});
+  }
 
   static void registerBackgroundHandler() {
     if (kIsWeb) return;
@@ -125,4 +158,18 @@ class NotificationService {
     await _users.removeFcmToken(uid, token);
     await _messaging.deleteToken();
   }
+}
+
+/// What a tapped push notification refers to.
+class NotificationTap {
+  const NotificationTap({this.type, this.recordId, this.notificationId});
+  final String? type;
+  final String? recordId;
+  final String? notificationId;
+
+  factory NotificationTap.fromData(Map<String, dynamic> data) => NotificationTap(
+        type: data['type'] as String?,
+        recordId: data['recordId'] as String?,
+        notificationId: data['notificationId'] as String?,
+      );
 }

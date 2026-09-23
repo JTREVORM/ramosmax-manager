@@ -39,7 +39,7 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 
 import { effectivePermissions, invalid, optionalText, precondition, requireReason, requirePermission } from './access.js';
 import { alreadyExists, audit, freshActor, notFound, requireDocId, stamp, uniqueRef } from './operations.js';
-import { requireObject } from './user_admin.js';
+import { NotificationType, notifySafely, requireObject } from './user_admin.js';
 
 export const ACCOUNTS = 'financial_accounts';
 export const TXNS = 'financial_transactions';
@@ -804,10 +804,12 @@ export async function reconcileAccount(deps, callerUid, rawData, now = Date.now(
   const attachmentPath = optionalAttachment(data.attachmentPath, 'reconciliations');
   const at = requireBusinessDate(data.reconciliationDate, now, { field: 'reconciliation date' });
 
-  return db.runTransaction(async (tx) => {
+  let fresh = false;
+  const out = await db.runTransaction(async (tx) => {
     const actor = await freshActor(tx, db, callerUid, now, 'finance.reconcile');
     const request = await readRequest(tx, db, requestId, actor.uid, 'reconciliation');
     if (request.earlier) return request.earlier;
+    fresh = true;
     const ledger = await openLedger(tx, db, [accountId], now);
     const account = ledger.account(accountId, actor.uid);
     const numbers = await readCounter(tx, db, 'reconciliations', 'RMX-REC-', 6);
@@ -844,6 +846,13 @@ export async function reconcileAccount(deps, callerUid, rawData, now = Date.now(
     });
     return result;
   });
+  // Phase 9: a difference needs someone who can decide on an adjustment.
+  if (fresh && out.differenceUgx !== 0) {
+    for (const uid of await holdersOf(db, ['finance.adjust'], now)) {
+      if (uid !== callerUid) await notifySafely(deps, uid, NotificationType.reconciliationDifference, out.reconciliationId);
+    }
+  }
+  return out;
 }
 
 export async function recordAccountAdjustment(deps, callerUid, rawData, now = Date.now()) {
@@ -961,7 +970,8 @@ export async function reverseFinancialTransaction(deps, callerUid, rawData, now 
 // ---------------------------------------------------------------------------
 
 export async function holdersOf(db, permissions, now) {
-  const users = await db.collection('users').where('active', '==', true).get();
+  // Bounded (Phase 9): used only to address notifications; tens of staff, never thousands.
+  const users = await db.collection('users').where('active', '==', true).limit(1000).get();
   return users.docs.filter((d) => {
     const perms = effectivePermissions(d.data(), now);
     return permissions.some((p) => perms.has(p));

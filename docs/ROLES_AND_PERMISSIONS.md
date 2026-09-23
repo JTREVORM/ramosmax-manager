@@ -310,3 +310,77 @@ is refused with `permission_not_allowed`.
 - Workers get **My After-Hours**.
 - Workers also get *New Service*, *Jobs*, *Invoices* and *Receipts*, visible **only while** the authorisation's
   temporary grants are live.
+
+## Phase 9: definitive role matrix
+
+Generated from `functions/src/access_catalog.json`, the same file the functions, the rules and the drift tests use.
+
+- **All:** every permission in the area.
+- **Read:** view permissions only.
+- **Own:** own records only.
+- **—:** none.
+- Otherwise, the permissions listed.
+
+Explicit grants, denials and temporary grants on a person's profile change their effective permissions. Denials always
+win.
+
+| Area | Admin | Manager | Auditor | Cashier | Worker | Shareholder |
+|---|---|---|---|---|---|---|
+| `users` | All | view, permissions.temporary, passwords.reset | Read | — | — | — |
+| `staff` | All | Read | Read | — | — | — |
+| `customers` | All | All | Read | All | — | — |
+| `vehicles` | All | All | Read | All | Read | — |
+| `services` | All | All | Read | Read | Read | — |
+| `jobs` | All | view, create, assign, manage, complete | Read | view, create | view.own, complete | — |
+| `invoices` | All | All | Read | view, create | — | — |
+| `payments` | All | view, record | Read | view, record | — | — |
+| `discounts` | All | All | — | — | — | — |
+| `credit` | All | All | Read | All | — | — |
+| `loyalty` | All | All | Read | view, redeem | — | — |
+| `finance` | All | view, transactions.view, transfer, deposit, reconcile | Read | — | — | Read |
+| `cash_handover` | All | All | — | submit | — | — |
+| `expenses` | All | view, create, review, approve, pay, cancel, categories.manage, recurring.manage | Read | view, create | — | — |
+| `inventory` | All | All | Read | — | — | — |
+| `attendance` | All | All | Read | view.own, mark | view.own, mark | — |
+| `allowances` | All | All | Read | Own | Own | — |
+| `salary` | All | Read | Read | — | — | — |
+| `payroll` | All | view, view.own, prepare, review | Read | Own | Own | — |
+| `deductions` | All | — | — | — | — | — |
+| `losses` | All | view, create, review, schedule | Read | — | — | — |
+| `after_hours` | All | approve, view, discrepancy.review | Read | — | request | — |
+| `shareholders` | All | Read | Read | — | — | Own |
+| `shares` | All | — | Read | — | — | — |
+| `dividends` | All | — | Read | — | — | — |
+| `reports` | All | Read | All | Read | — | Read |
+| `audit` | All | — | All | — | — | — |
+| `notifications` | All | All | All | All | All | All |
+| `settings` | All | — | Read | — | — | — |
+
+**Notes:**
+
+- **No broad fallbacks.** A role holds only what is listed. The Administrator's `*` is the only wildcard, and the
+  last-Administrator protection keeps one.
+- **Authorisation-only permissions.** `after_hours.operate` and `after_hours.cash.collect` are left out above. Nobody
+  holds them permanently (Phase 8), and even an Administrator can use them only inside an after-hours authorisation,
+  because opening a session needs one.
+- **Auditors are read-only.** Their list contains no write permission, and every write rule and function refuses them
+  (tested).
+- **Workers** see their own jobs, attendance, pay and after-hours records. Organisation-wide payroll, finance and
+  reports stay closed; adding reports gave them nothing.
+- **Shareholders** see their own shareholding through a function, plus the financial summaries their role has always
+  had (`finance.view`, report permissions). They cannot read other shareholders' records.
+
+**Phase 9 menu changes:**
+
+- **Now available:** Reports (Admin, Manager, Auditor, Cashier, Shareholder), Audit Logs (Admin, Auditor), Settings
+  (Admin, Auditor) and Business Performance (Shareholder: the executive summary).
+- **Removed placeholders:** "Staff" (Admin; staff links are managed in User Management) and "Discrepancies" (Auditor;
+  After-Hours and Reconciliation show them).
+- **Notifications** open from the bell for anyone with `notifications.view`.
+
+A unit test fails if any role's menu contains a module that would open a "not available" screen.
+
+| New callable | Permission |
+|---|---|
+| `getBusinessReport` | Per report, see [REPORTS.md](REPORTS.md) |
+| `updateNotificationPreferences` | Any active user, own preferences only |

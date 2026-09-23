@@ -87,3 +87,21 @@ The client's cached balance is never the basis for a financial decision. The ser
   act after it ended. Widget and unit tests check that offline calls never reach the server.
 - **Retries:** authorise, open, submit, receive and resolve carry a `requestId`, so a retry after a lost response is
   recorded once.
+
+## Phase 9
+
+- **Reports** are calculated on the server. Offline the Reports screen says a connection is needed and requests
+  nothing.
+- **Notifications:**
+  - the inbox is readable offline from the cache;
+  - marking a notice read is a harmless field update, so Firestore may queue it and apply it on reconnect;
+  - "Mark all as read" and changing preferences need a connection.
+- **Audit Logs and Settings** are readable offline from the cache.
+- **Lost answers.** When a command was sent but its answer never arrived (timeout, the connection dropped, the app went
+  to the background), the app says it **may already have been saved**, never that it failed. Retrying the same action
+  is safe:
+  - payments, expense payments, transfers, deposits, contributions, dividends and after-hours commands carry a
+    `requestId`, and a retry returns the first result;
+  - status changes refuse to run twice ("already approved", "already received").
+
+  The concurrency tests prove a double request is recorded once.

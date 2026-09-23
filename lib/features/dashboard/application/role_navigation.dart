@@ -26,7 +26,8 @@ enum AppModule {
   loyalty('loyalty', 'Loyalty', Icons.loyalty_outlined, {Permission.loyaltyView}, available: true),
   finance('finance', 'Finance', Icons.account_balance_outlined, {Permission.financeView}, available: true),
   financialSummary('financial-summary', 'Financial Summary', Icons.account_balance_outlined, {Permission.financeView}, available: true),
-  businessPerformance('performance', 'Business Performance', Icons.insights_outlined, {Permission.reportsOperationalView}),
+  // Phase 9: opens Reports on the executive summary.
+  businessPerformance('performance', 'Business Performance', Icons.insights_outlined, {Permission.reportsOperationalView}, available: true),
   transactions('transactions', 'Transactions', Icons.swap_horiz, {Permission.financeTransactionsView}, available: true),
   reconciliation('reconciliation', 'Reconciliation', Icons.fact_check_outlined, {Permission.financeReconcile, Permission.financeView},
       available: true),
@@ -52,7 +53,8 @@ enum AppModule {
       available: true),
   payroll('payroll', 'Payroll', Icons.wallet_outlined, {Permission.payrollView, Permission.salaryView}, available: true),
   losses('losses', 'Loss Incidents', Icons.report_problem_outlined, {Permission.lossesView}, available: true),
-  reports('reports', 'Reports', Icons.bar_chart_outlined, {Permission.reportsOperationalView, Permission.reportsFinancialView}),
+  // Phase 9: server-calculated, permission-filtered reports with CSV export.
+  reports('reports', 'Reports', Icons.bar_chart_outlined, {Permission.reportsOperationalView, Permission.reportsFinancialView}, available: true),
   // Phase 7. Shareholders: the register (reports level) and, with
   // shareholders.view, profiles. Shares: holdings, the ownership ledger and
   // contributions. Dividends: headers with reports level, allocations and
@@ -66,9 +68,11 @@ enum AppModule {
       available: true, shortLabel: 'Shares'),
   users('users', 'User Management', Icons.manage_accounts_outlined, {Permission.usersView},
       available: true, shortLabel: 'Users'),
-  auditLogs('audit', 'Audit Logs', Icons.policy_outlined, {Permission.auditView}),
-  settings('settings', 'Settings', Icons.settings_outlined, {Permission.settingsView}),
-  myProfile('profile', 'My Profile', Icons.person_outline, {}, available: true);
+  auditLogs('audit', 'Audit Logs', Icons.policy_outlined, {Permission.auditView}, available: true),
+  settings('settings', 'Settings', Icons.settings_outlined, {Permission.settingsView}, available: true),
+  myProfile('profile', 'My Profile', Icons.person_outline, {}, available: true),
+  // Phase 9: reached from the app-bar bell, not from a menu.
+  notifications('notifications', 'Notifications', Icons.notifications_outlined, {Permission.notificationsView}, available: true);
 
   const AppModule(this.key, this.label, this.icon, this.requires, {this.available = false, this.shortLabel});
 
@@ -96,7 +100,7 @@ abstract final class RoleNavigation {
     UserRole.admin: [
       AppModule.dashboard, AppModule.newService, AppModule.vehicles, AppModule.customers,
       AppModule.services, AppModule.jobs, AppModule.invoices, AppModule.payments, AppModule.receipts,
-      AppModule.credit, AppModule.loyalty, AppModule.staff, AppModule.finance, AppModule.expenses,
+      AppModule.credit, AppModule.loyalty, AppModule.finance, AppModule.expenses,
       AppModule.inventory, AppModule.attendance, AppModule.allowances, AppModule.payroll, AppModule.losses,
       AppModule.shareholders, AppModule.shares, AppModule.dividends, AppModule.afterHours,
       AppModule.reports, AppModule.users, AppModule.settings, AppModule.auditLogs,
@@ -116,6 +120,8 @@ abstract final class RoleNavigation {
       AppModule.attendance, AppModule.allowances,
       // Only when granted (e.g. dividends.view + dividends.pay to pay out).
       AppModule.dividends,
+      // Phase 9: operational summary, credit and expense reports.
+      AppModule.reports,
     ],
     UserRole.worker: [
       AppModule.dashboard, AppModule.myJobs, AppModule.vehicles, AppModule.services,
@@ -131,10 +137,10 @@ abstract final class RoleNavigation {
     UserRole.auditor: [
       AppModule.dashboard, AppModule.auditLogs, AppModule.finance, AppModule.transactions, AppModule.expenses, AppModule.inventory,
       AppModule.payroll, AppModule.attendance, AppModule.allowances, AppModule.losses,
-      AppModule.reconciliation, AppModule.discrepancies, AppModule.afterHours, AppModule.users,
+      AppModule.reconciliation, AppModule.afterHours, AppModule.reports, AppModule.users,
       AppModule.jobs, AppModule.invoices, AppModule.payments, AppModule.receipts, AppModule.credit,
       AppModule.loyalty, AppModule.vehicles, AppModule.customers, AppModule.services,
-      AppModule.shareholders, AppModule.shares, AppModule.dividends,
+      AppModule.shareholders, AppModule.shares, AppModule.dividends, AppModule.settings,
     ],
   };
 
@@ -149,7 +155,9 @@ abstract final class RoleNavigation {
   }
 
   static bool canOpen(AppUser user, AppModule module, DateTime now) =>
-      module == AppModule.myProfile || modulesFor(user, now).contains(module);
+      module == AppModule.myProfile ||
+      (module == AppModule.notifications && user.can(Permission.notificationsView, now)) ||
+      modulesFor(user, now).contains(module);
 
   /// Bottom bar holds at most this many entries; the rest live under "More".
   static const int maxBarItems = 5;

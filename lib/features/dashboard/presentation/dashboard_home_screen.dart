@@ -94,6 +94,8 @@ class DashboardHomeScreen extends ConsumerWidget {
             physics: const NeverScrollableScrollPhysics(),
             mainAxisSpacing: AppSpacing.sm,
             crossAxisSpacing: AppSpacing.sm,
+            // Slightly taller than wide so two-line labels fit on small phones.
+            childAspectRatio: 0.9,
             children: [
               for (final m in modules)
                 Card(
@@ -107,10 +109,14 @@ class DashboardHomeScreen extends ConsumerWidget {
                         children: [
                           Icon(m.icon, color: theme.colorScheme.primary, size: 28),
                           const SizedBox(height: AppSpacing.xs),
-                          Text(m.label,
-                              textAlign: TextAlign.center,
-                              maxLines: 2,
-                              style: theme.textTheme.labelMedium),
+                          // Flexible + ellipsis: never overflows, even with large text settings.
+                          Flexible(
+                            child: Text(m.label,
+                                textAlign: TextAlign.center,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.labelMedium),
+                          ),
                         ],
                       ),
                     ),
