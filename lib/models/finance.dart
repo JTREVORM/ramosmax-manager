@@ -153,7 +153,11 @@ enum TransactionType {
   reversal('reversal', 'Reversal'),
   // Phase 6: staff pay - outflows, never revenue.
   allowancePayment('allowance_payment', 'Allowance payment'),
-  payrollPayment('payroll_payment', 'Payroll payment');
+  payrollPayment('payroll_payment', 'Payroll payment'),
+  // Phase 7: owners' money - share capital is never revenue, dividends are
+  // never operating expenses.
+  shareCapitalContribution('share_capital_contribution', 'Share capital contribution'),
+  dividendPayment('dividend_payment', 'Dividend payment');
 
   const TransactionType(this.key, this.label);
   final String key;
@@ -195,6 +199,9 @@ class FinancialTransaction {
     this.purchaseNumber,
     this.depositNumber,
     this.payrollNumber,
+    this.shareholderNumber,
+    this.contributionNumber,
+    this.dividendNumber,
     this.reversalOfTransactionId,
     this.reversedByTransactionId,
     this.reversalReason,
@@ -225,6 +232,11 @@ class FinancialTransaction {
   final String? purchaseNumber;
   final String? depositNumber;
   final String? payrollNumber;
+
+  /// Phase 7 references (share capital contributions and dividend payments).
+  final String? shareholderNumber;
+  final String? contributionNumber;
+  final String? dividendNumber;
   final String? reversalOfTransactionId;
   final String? reversedByTransactionId;
   final String? reversalReason;
@@ -246,10 +258,15 @@ class FinancialTransaction {
   /// Staff pay (Phase 6), reversed from the allowance / payroll screens.
   bool get isStaffPay => type == TransactionType.allowancePayment || type == TransactionType.payrollPayment;
 
+  /// Owners' money (Phase 7), reversed from the share-contribution and
+  /// dividend screens so the shareholder records stay consistent.
+  bool get isOwnership => type == TransactionType.shareCapitalContribution || type == TransactionType.dividendPayment;
+
   /// Reversible from the finance screens (customer payments are reversed
-  /// from their invoice, staff pay from its allowance or payroll).
+  /// from their invoice, staff pay from its allowance or payroll, owners'
+  /// money from the shareholder screens).
   bool get canReverse =>
-      !reversed && type != TransactionType.reversal && type != TransactionType.customerPayment && !isStaffPay;
+      !reversed && type != TransactionType.reversal && type != TransactionType.customerPayment && !isStaffPay && !isOwnership;
 
   String get label => type == TransactionType.reversal && reversalOfType != null ? 'Reversal of ${reversalOfType!.label.toLowerCase()}' : type.label;
 
@@ -281,6 +298,9 @@ class FinancialTransaction {
         purchaseNumber: d['purchaseNumber'] as String?,
         depositNumber: d['depositNumber'] as String?,
         payrollNumber: d['payrollNumber'] as String?,
+        shareholderNumber: d['shareholderNumber'] as String?,
+        contributionNumber: d['contributionNumber'] as String?,
+        dividendNumber: d['dividendNumber'] as String?,
         reversalOfTransactionId: d['reversalOfTransactionId'] as String?,
         reversedByTransactionId: d['reversedByTransactionId'] as String?,
         reversalReason: d['reversalReason'] as String?,
@@ -305,6 +325,8 @@ class DailyFinanceSummary {
     this.adjustmentsOut = Money.zero,
     this.allowancesPaid = Money.zero,
     this.payrollPaid = Money.zero,
+    this.shareCapitalIn = Money.zero,
+    this.dividendsPaid = Money.zero,
     this.reversals = const {},
     this.expensesByCategory = const {},
     this.transactionCount = 0,
@@ -325,6 +347,11 @@ class DailyFinanceSummary {
   final Money allowancesPaid;
   final Money payrollPaid;
 
+  /// Owners' money (Phase 7): share capital received and dividends paid.
+  /// Neither is income nor an operating expense.
+  final Money shareCapitalIn;
+  final Money dividendsPaid;
+
   /// Reversed amounts by original transaction type key.
   final Map<String, Money> reversals;
   final Map<String, Money> expensesByCategory;
@@ -340,6 +367,12 @@ class DailyFinanceSummary {
   /// Staff pay out (allowances + payroll) less reversals made that day.
   Money get netStaffPay =>
       allowancesPaid + payrollPaid - _rev(TransactionType.allowancePayment) - _rev(TransactionType.payrollPayment);
+
+  /// Share capital received less contribution reversals made that day.
+  Money get netShareCapital => shareCapitalIn - _rev(TransactionType.shareCapitalContribution);
+
+  /// Dividends paid less dividend-payment reversals made that day.
+  Money get netDividends => dividendsPaid - _rev(TransactionType.dividendPayment);
 
   /// Money moved between accounts (transfers + deposits) — never income.
   Money get netTransfers =>
@@ -373,6 +406,8 @@ class DailyFinanceSummary {
       adjustmentsOut: m(d['adjustmentsOutUgx']),
       allowancesPaid: m(d['allowancesPaidUgx']),
       payrollPaid: m(d['payrollPaidUgx']),
+      shareCapitalIn: m(d['shareCapitalInUgx']),
+      dividendsPaid: m(d['dividendsPaidUgx']),
       reversals: rev,
       expensesByCategory: map(d['expensesByCategory']),
       transactionCount: (d['transactionCount'] as num?)?.toInt() ?? 0,
@@ -396,6 +431,8 @@ class DailyFinanceSummary {
         adjustmentsOut: r.adjustmentsOut + d.adjustmentsOut,
         allowancesPaid: r.allowancesPaid + d.allowancesPaid,
         payrollPaid: r.payrollPaid + d.payrollPaid,
+        shareCapitalIn: r.shareCapitalIn + d.shareCapitalIn,
+        dividendsPaid: r.dividendsPaid + d.dividendsPaid,
         reversals: add(r.reversals, d.reversals),
         expensesByCategory: add(r.expensesByCategory, d.expensesByCategory),
         transactionCount: r.transactionCount + d.transactionCount,

@@ -153,3 +153,28 @@ Firestore and Storage once all active clients support it.
 - The mobile app contains no service-account key or other secret. Cloud Functions run under Google-managed
   credentials.
 - Keep the production service-account key with as few people as possible, and rotate it if exposed.
+
+## Phase 7: shareholders, shares and dividends
+
+- **Client access:** every new collection is read-only to clients. See `firebase/firestore.rules` → *Shareholders,
+  shares, ownership and dividends*:
+  - `shareholders`, `share_classes`, `shareholdings`, `share_transactions`, `share_contributions`,
+    `share_register`, `dividends`, `dividend_allocations`: `allow write: if false`;
+  - reads are split by level:
+
+    | Permission | Reads |
+    |---|---|
+    | `shareholders.view` | profiles |
+    | `shares.view` | ledger, holdings, contributions |
+    | `dividends.view` | allocations |
+    | `shareholders.reports.view` | register totals and dividend headers only |
+- **Server-authoritative figures:** ownership percentages, share totals, commitments, contributions, dividend pools,
+  allocations and payment status are all calculated by the Cloud Functions. Figures sent by the app are ignored.
+- **Shareholder isolation:** the shareholder role can read **none** of these collections. Its own records come from
+  `getMyShareholding`, which selects by the caller's uid on the server. Tested in `rules.test.js` and `shares.test.js`.
+- **Sensitive data:** phone and identification numbers are masked in audit entries. Notifications carry no name,
+  share count or amount.
+- **Every mutation:** re-reads the caller inside the transaction (active account, permission), validates the input and
+  state, protects against duplicates with `requestId` or state checks, and writes its audit entry in the same
+  transaction.
+- **Storage rules:** unchanged. Phase 7 stores no documents or photos.

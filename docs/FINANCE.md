@@ -269,3 +269,25 @@ recorded once. All of them are online-only (see OFFLINE.md).
   of summaries per query.
 - Deposits, transfers and adjustments are recorded and approved by the same authorised person (`approvedBy` = the
   actor). There is no separate second-person approval step.
+
+## Phase 7: owners' money (share capital and dividends)
+
+Two ledger types were added. They reuse the same accounts and ledger; no second ledger exists.
+
+| Type | Direction | Posted by | Daily total | Revenue? | Operating expense? |
+|---|---|---|---|---|---|
+| `share_capital_contribution` (SHARE_CAPITAL_CONTRIBUTION) | in | `shares.js` (issue approval, `recordShareContribution`) | `shareCapitalInUgx` | **No** | — |
+| `dividend_payment` (DIVIDEND_PAYMENT) | out | `dividends.payDividend` (one entry per allocation) | `dividendsPaidUgx` | — | **No** |
+
+- **Accounts:** a shareholder contribution received in Cash, MTN Merchant, Airtel Merchant or a bank account raises
+  that account's balance in the same transaction that records the contribution. A dividend payment lowers the chosen
+  account; the no-overdraft rule applies, so a payment is refused (and nothing is paid) if the account lacks the money.
+- **Reversals:** these use the existing `reversal` type with `reversalOfType` `share_capital_contribution` or
+  `dividend_payment` (the brief's SHARE_CAPITAL_REVERSAL / DIVIDEND_REVERSAL). They are made **only** from the
+  shareholder and dividend screens (`reverseShareContribution`, `reverseShareTransaction`, `reverseDividendPayment`),
+  which also restore the contribution, holding or allocation atomically. `reverseFinancialTransaction` refuses both
+  types with `use_ownership_reversal`, following the Phase 6 staff-pay pattern (`OWNERSHIP_TXN_TYPES` in `finance.js`).
+- **Reports:** *Finance → Reports* shows them in a separate **Owners' money (not income, not operating expenses)**
+  card. Income, expenses, staff pay and net cash from operations are unchanged. RamosMAX does not calculate profit.
+- **Ledger entries** carry `shareholderId` / `shareholderNumber`, `contributionId` / `contributionNumber`,
+  `shareTransactionId`, or `dividendId` / `dividendNumber` / `allocationId` / `allocationNumber` for traceability.

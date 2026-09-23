@@ -10,19 +10,20 @@
 | **4 — Operations, Billing & Loyalty** (done) | Jobs with `RMX-JOB` numbers, per-service worker orders with a controlled status flow, assignment and reassignment with history, worker dashboard; invoices (`RMX-INV`), discounts with reasons and approval, partial payments with idempotency, receipts (`RMX-RCP`) with share, credit and receivables; vehicle loyalty with ledger, rewards and corrections; see OPERATIONS.md, BILLING_AND_PAYMENTS.md, LOYALTY.md |
 | **5 — Finance, Expenses & Inventory** (done) | Financial accounts (Cash at Hand, MTN/Airtel Merchant, banks) with an immutable ledger (`RMX-TXN`); every customer payment posts to its account atomically; transfers, bank deposits (`RMX-BNK`), cash awaiting banking, reconciliation (`RMX-REC`) with explicit adjustments, reversals; expenses (`RMX-EXP`) with review → approve → pay, categories, recurring reminders, reports; inventory items (SKUs), suppliers (`RMX-SUP`), purchases (`RMX-PUR`), stock movements (`RMX-STM`), adjustments, no negative stock, low-stock alerts; see FINANCE.md, EXPENSES.md, INVENTORY.md |
 | **6 — Attendance, Allowances, Payroll & Losses** (done) | Attendance (`RMX-ATT`) with server-side lateness from a configurable policy, verification, audited corrections, biometric-ready data model; daily allowances (`RMX-ALL`, UGX 5,000 configurable) with FULL / DEDUCT / REJECT for late arrivals, approval and payment through the Phase 5 ledger; effective-dated salary history; payroll (`RMX-PAY`) with server-side gross/deductions/net, review → Admin approval → one-transaction payment → lock, corrections and reversals; loss incidents (`RMX-LOSS`) with approved recoveries scheduled as deductions (`RMX-DED`); worker-isolated rules; see ATTENDANCE.md, ALLOWANCES.md, PAYROLL.md, LOSSES_AND_DEDUCTIONS.md |
-| 7 — next | Not started |
-| Later | cash handovers · after-hours · shareholders & dividends · reports · full notifications |
+| **7 — Shareholders, Shares & Dividends** (done) | Shareholder profiles (`RMX-SHR`) with search, statuses and self-service for linked shareholders; configurable share classes; an immutable ownership ledger (`RMX-SHR-TXN`) for issues, transfers, adjustments and reversals with second-person approval; server-side contributions (shares × value per share, `RMX-SHR-CON`) posted to the Phase 5 ledger as share capital (never revenue); server-side ownership % and ownership on any date; dividends (`RMX-DIV`) from an approved amount, with record-date eligibility, frozen allocations (`RMX-DIV-PAY`), Administrator approval, payment through the ledger as distributions (never operating expenses), guarded reversals and cancellation; see SHAREHOLDERS.md, SHARES.md, DIVIDENDS.md |
+| 8 — next | Not started |
+| Later | cash handovers · after-hours · reports · full notifications |
 
 ## Role menus (implemented in `RoleNavigation`)
 
 | Role | Menu |
 |---|---|
-| Admin | Dashboard, New Service, Vehicles, Customers, Services, Jobs, Invoices, Payments, Receipts, Credit, Loyalty, Staff, Finance, Expenses, Inventory, Attendance, Allowances, Payroll, Loss Incidents, Reports, User Management, Settings, Audit |
-| Manager | Dashboard, New Service, Vehicles, Jobs, Customers, Services, Invoices, Payments, Receipts, Credit, Loyalty, Attendance, Allowances, Payroll, Loss Incidents, Finance, Expenses, Inventory, Reports, Cash Handover, User Management (view + temporary access) |
+| Admin | Dashboard, New Service, Vehicles, Customers, Services, Jobs, Invoices, Payments, Receipts, Credit, Loyalty, Staff, Finance, Expenses, Inventory, Attendance, Allowances, Payroll, Loss Incidents, Shareholders, Shares, Dividends, Reports, User Management, Settings, Audit |
+| Manager | Dashboard, New Service, Vehicles, Jobs, Customers, Services, Invoices, Payments, Receipts, Credit, Loyalty, Attendance, Allowances, Payroll, Loss Incidents, Finance, Expenses, Inventory, Reports, Cash Handover, Shareholders (register reports only), Dividends (headers and totals), User Management (view + temporary access) |
 | Cashier | Dashboard, New Service, Vehicles, Customers, Jobs, Services, Invoices, Payments, Receipts, Credit, Loyalty, Expenses (record for approval), Reconciliation (only if finance access is granted), Attendance (own), Allowances (My pay) |
 | Worker | Dashboard, My Jobs, Vehicles (look-up), Services, Attendance (own, clock in/out), Allowances (My pay: allowances, payslips, salary, deductions), My Profile |
-| Shareholder | Dashboard, Financial Summary, Business Performance, Reports, Dividends |
-| Auditor | Dashboard, Audit Logs, Finance, Transactions, Expenses, Inventory, Payroll, Attendance, Allowances, Loss Incidents, Reconciliation, Discrepancies, User Management, Jobs, Invoices, Payments, Receipts, Credit, Loyalty, Vehicles, Customers, Services (all read-only) |
+| Shareholder | Dashboard, Financial Summary, Business Performance, Reports, My Shareholding (own shares, contributions and dividends only) |
+| Auditor | Dashboard, Audit Logs, Finance, Transactions, Expenses, Inventory, Payroll, Attendance, Allowances, Loss Incidents, Reconciliation, Discrepancies, User Management, Jobs, Invoices, Payments, Receipts, Credit, Loyalty, Vehicles, Customers, Services, Shareholders, Shares, Dividends (all read-only) |
 
 ## Business rules the foundation supports
 

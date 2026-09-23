@@ -63,3 +63,14 @@ The client's cached balance is never the basis for a financial decision. The ser
   registered".
 - Access changes (deactivation, expired grants) apply as soon as the device reconnects. Rules enforce them
   server-side regardless.
+
+## Phase 7: shareholders, shares and dividends
+
+- **Viewable offline:** the register, shareholder profiles, share transactions, contributions, dividends and
+  allocations, from the Firestore cache.
+- **Online only:** every mutation goes through `ShareholderActions`, which uses `runOnline` and so is never queued.
+  That covers adding or editing shareholders, status changes, links, classes, policies, issuing, transferring,
+  adjusting, approving, reversing, contributions, and every dividend step including payment.
+- **Also online only:** *Ownership on a date* and *My Shareholding*, which are function calls.
+- **Retries:** issues, transfers, adjustments, reversals, contributions, dividend creation and dividend payments carry
+  a `requestId`, so a retry after a lost response is recorded once.

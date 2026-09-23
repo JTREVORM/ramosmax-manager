@@ -158,6 +158,7 @@ service cloud.firestore {
         'losses.view', 'losses.create', 'losses.review', 'losses.schedule',
         'after_hours.approve',
         'reports.operational.view', 'reports.financial.view',
+        'shareholders.reports.view',
         'notifications.view'
       ];
     }
@@ -191,10 +192,12 @@ service cloud.firestore {
       ];
     }
 
+    // Phase 7: own shareholding only (served by the getMyShareholding
+    // function) - never the register or another shareholder's records.
     function shareholderPermissions() {
       return [
         'finance.view',
-        'shareholders.view', 'dividends.view',
+        'shareholders.view.own',
         'reports.operational.view', 'reports.financial.view',
         'notifications.view'
       ];
@@ -213,7 +216,7 @@ service cloud.firestore {
         'inventory.view', 'inventory.reports.view',
         'attendance.view', 'allowances.view', 'payroll.view',
         'salary.view', 'salary.history.view', 'losses.view',
-        'shareholders.view', 'dividends.view',
+        'shareholders.view', 'shareholders.reports.view', 'shares.view', 'dividends.view',
         'reports.operational.view', 'reports.financial.view',
         'reports.payroll.view',
         'audit.view', 'settings.view',
@@ -565,6 +568,73 @@ service cloud.firestore {
     }
 
     // ===================================================================
+    // Shareholders, shares, ownership and dividends (Phase 7)
+    // ===================================================================
+    // All read-only to clients. Shareholder profiles and statuses, share
+    // quantities, commitments and contributions, ownership percentages,
+    // dividend pools, allocations and payment status are written only by the
+    // Cloud Functions in functions/src/shareholders.js, shares.js and
+    // dividends.js, which calculate every figure themselves (never from the
+    // app) and write the audit trail in the same transaction. Nothing is
+    // deleted: share entries and contributions are reversed, dividends
+    // cancelled, shareholders marked exited.
+    //
+    // Levels of access:
+    //   shareholders.view          profiles (contact and identification details)
+    //   shares.view                holdings, the share ledger and contributions
+    //   dividends.view             dividends and every allocation
+    //   shareholders.reports.view  register-level totals, the ownership
+    //                              distribution and dividend headers only
+    // A shareholder (shareholders.view.own) reads NOTHING here directly: their
+    // own records come from the getMyShareholding function, so they can never
+    // query another shareholder's data.
+
+    match /shareholders/{shareholderId} {
+      allow get, list: if hasPermission('shareholders.view');
+      allow write: if false;
+    }
+
+    match /share_classes/{classId} {
+      allow get, list: if hasEitherPermission('shares.view', 'shareholders.reports.view')
+        || hasPermission('shareholders.view');
+      allow write: if false;
+    }
+
+    match /shareholdings/{holdingId} {
+      allow get, list: if hasPermission('shares.view');
+      allow write: if false;
+    }
+
+    // The immutable ownership ledger.
+    match /share_transactions/{transactionId} {
+      allow get, list: if hasPermission('shares.view');
+      allow write: if false;
+    }
+
+    match /share_contributions/{contributionId} {
+      allow get, list: if hasPermission('shares.view');
+      allow write: if false;
+    }
+
+    // share_register/current: totals and the ownership distribution
+    // (shareholder number, name, shares, %) - no contact or identity data.
+    match /share_register/{docId} {
+      allow get, list: if hasEitherPermission('shareholders.reports.view', 'shares.view')
+        || hasPermission('shareholders.view');
+      allow write: if false;
+    }
+
+    match /dividends/{dividendId} {
+      allow get, list: if hasEitherPermission('dividends.view', 'shareholders.reports.view');
+      allow write: if false;
+    }
+
+    match /dividend_allocations/{allocationId} {
+      allow get, list: if hasPermission('dividends.view');
+      allow write: if false;
+    }
+
+    // ===================================================================
     // audit_logs
     // ===================================================================
     // Append-only. Entries may be created by any active user (so every module
@@ -604,7 +674,9 @@ service cloud.firestore {
     // ===================================================================
     // settings
     // ===================================================================
-    // Read-only reference data (tax rates, loyalty thresholds; Phase 6:
+    // Read-only reference data (tax rates, loyalty thresholds; Phase 7:
+    // settings/share_policy and settings/dividend_policy - approval and
+    // payment switches only, no amounts or names; Phase 6:
     // settings/payroll_policy - reporting time, grace period, daily allowance
     // and payroll rules, no individual's pay; Phase 5: settings/payment_accounts - the active bank accounts
     // a cashier may pick for a bank payment, names and masked numbers only,
@@ -624,9 +696,9 @@ service cloud.firestore {
     // attempt limits, keyed by a hash of the phone number), staff_documents, service_jobs,
     // job_items, bank_accounts, mobile_money_accounts (Phase 5 keeps every
     // account in financial_accounts), cash_handovers, inventory,
-    // after_hours_access, after_hours_sessions, shareholders,
-    // shares, dividends - is denied outright until the phase that owns it
-    // ships its rules alongside its code.
+    // after_hours_access, after_hours_sessions, shares (Phase 7 uses
+    // shareholdings / share_transactions instead) - is denied outright until
+    // the phase that owns it ships its rules alongside its code.
 
     match /{document=**} {
       allow read, write: if false;

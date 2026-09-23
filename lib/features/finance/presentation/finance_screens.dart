@@ -679,6 +679,13 @@ class _FinanceReportsScreenState extends ConsumerState<FinanceReportsScreen> {
                     MoneyLine('Net cash from operations', net, emphasis: true, color: net.isNegative ? AppColors.danger : AppColors.success),
                   ], footer: 'Credit sales are not included until paid. Stock purchases and staff pay are shown separately from expenses.'),
                   const SizedBox(height: AppSpacing.sm),
+                  if (!t.netShareCapital.isZero || !t.netDividends.isZero) ...[
+                    MoneyCard(title: 'Owners\' money (not income, not operating expenses)', lines: [
+                      MoneyLine('Share capital received', t.netShareCapital, valueKey: const Key('report-share-capital')),
+                      MoneyLine('Dividends paid (distributions)', t.netDividends, valueKey: const Key('report-dividends')),
+                    ], footer: 'Share capital is owners\' money, not revenue. Dividends are distributions to shareholders, not operating expenses.'),
+                    const SizedBox(height: AppSpacing.sm),
+                  ],
                   MoneyCard(title: 'Movements between accounts (not income)', lines: [
                     MoneyLine('Transfers', t.transfers),
                     MoneyLine('Bank deposits', t.deposits),

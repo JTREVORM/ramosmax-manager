@@ -1,5 +1,5 @@
 {
-  "_comment": "Server-side copy of the RamosMAX access model. MUST match lib/core/auth/permissions.dart, lib/core/auth/user_role.dart and firebase/firestore.rules - test/unit/permissions_test.dart fails if they drift. passwordResetRolesForNonAdmins: roles whose passwords a non-admin holder of users.passwords.reset may reset (Managers -> Workers only). Phase 6 legacy names kept for stored grants: payroll.process is honoured as payroll.prepare and staff.salary.view as salary.view.",
+  "_comment": "Server-side copy of the RamosMAX access model. MUST match lib/core/auth/permissions.dart, lib/core/auth/user_role.dart and firebase/firestore.rules - test/unit/permissions_test.dart fails if they drift. passwordResetRolesForNonAdmins: roles whose passwords a non-admin holder of users.passwords.reset may reset (Managers -> Workers only). Phase 6 legacy names kept for stored grants: payroll.process is honoured as payroll.prepare and staff.salary.view as salary.view. Phase 7: the shareholder role holds shareholders.view.own (own records through getMyShareholding) instead of shareholders.view / dividends.view.",
   "permissions": [
     "users.view",
     "users.create",
@@ -100,9 +100,23 @@
     "after_hours.request",
     "after_hours.approve",
     "shareholders.view",
+    "shareholders.view.own",
+    "shareholders.create",
+    "shareholders.update",
     "shareholders.manage",
+    "shareholders.reports.view",
+    "shares.view",
+    "shares.issue",
+    "shares.transfer",
+    "shares.adjust",
+    "shares.approve",
     "dividends.view",
+    "dividends.create",
+    "dividends.calculate",
     "dividends.declare",
+    "dividends.approve",
+    "dividends.pay",
+    "dividends.adjust",
     "reports.operational.view",
     "reports.financial.view",
     "reports.payroll.view",
@@ -190,6 +204,7 @@
       "after_hours.approve",
       "reports.operational.view",
       "reports.financial.view",
+      "shareholders.reports.view",
       "notifications.view"
     ],
     "cashier": [
@@ -232,8 +247,7 @@
     ],
     "shareholder": [
       "finance.view",
-      "shareholders.view",
-      "dividends.view",
+      "shareholders.view.own",
       "reports.operational.view",
       "reports.financial.view",
       "notifications.view"
@@ -261,6 +275,8 @@
       "salary.history.view",
       "losses.view",
       "shareholders.view",
+      "shareholders.reports.view",
+      "shares.view",
       "dividends.view",
       "reports.operational.view",
       "reports.financial.view",

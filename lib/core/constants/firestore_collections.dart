@@ -85,10 +85,25 @@ abstract final class FirestoreCollections {
   static const String afterHoursAccess = 'after_hours_access';
   static const String afterHoursSessions = 'after_hours_sessions';
 
-  // Shareholding
+  // Shareholding (Phase 7)
   static const String shareholders = 'shareholders';
+
+  /// Reserved Phase 1 name, unused: Phase 7 keeps holdings in [shareholdings]
+  /// and the ownership ledger in [shareTransactions].
   static const String shares = 'shares';
+  static const String shareClasses = 'share_classes';
+
+  /// One shareholder's holding in one class (doc ID `{shareholderId}_{classId}`).
+  static const String shareholdings = 'shareholdings';
+
+  /// The immutable ownership ledger (issues, transfers, adjustments, reversals).
+  static const String shareTransactions = 'share_transactions';
+  static const String shareContributions = 'share_contributions';
+
+  /// `share_register/current`: register totals and the ownership distribution.
+  static const String shareRegister = 'share_register';
   static const String dividends = 'dividends';
+  static const String dividendAllocations = 'dividend_allocations';
 
   // Platform
   static const String notifications = 'notifications';
@@ -108,6 +123,15 @@ abstract final class FirestoreCollections {
 abstract final class FirestoreDocs {
   /// Attendance, allowance and payroll rules (Phase 6).
   static const String payrollPolicy = 'payroll_policy';
+
+  /// Share approval and payment rules (Phase 7).
+  static const String sharePolicy = 'share_policy';
+
+  /// Dividend approval rule (Phase 7).
+  static const String dividendPolicy = 'dividend_policy';
+
+  /// The register summary inside [FirestoreCollections.shareRegister].
+  static const String shareRegisterCurrent = 'current';
 }
 
 /// Field names shared by every document (see docs/FIRESTORE_CONVENTIONS.md).

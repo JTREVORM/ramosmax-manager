@@ -126,9 +126,25 @@ enum Permission {
   afterHoursApprove('after_hours.approve', 'Approve after-hours access'),
 
   shareholdersView('shareholders.view', 'View shareholders'),
-  shareholdersManage('shareholders.manage', 'Manage shareholders'),
+  /// Phase 7 self-service: a shareholder's OWN profile, shares and dividends,
+  /// served by the getMyShareholding function (never a Firestore query).
+  shareholdersViewOwn('shareholders.view.own', 'View own shareholding and dividends'),
+  shareholdersCreate('shareholders.create', 'Add shareholders'),
+  shareholdersUpdate('shareholders.update', 'Edit shareholder details'),
+  shareholdersManage('shareholders.manage', 'Manage shareholder status, links and share classes'),
+  shareholdersReportsView('shareholders.reports.view', 'View shareholder and ownership reports'),
+  sharesView('shares.view', 'View share holdings and transactions'),
+  sharesIssue('shares.issue', 'Issue shares and record contributions'),
+  sharesTransfer('shares.transfer', 'Transfer shares'),
+  sharesAdjust('shares.adjust', 'Adjust and reverse share records'),
+  sharesApprove('shares.approve', 'Approve share transactions'),
   dividendsView('dividends.view', 'View dividends'),
+  dividendsCreate('dividends.create', 'Create dividend drafts'),
+  dividendsCalculate('dividends.calculate', 'Calculate dividend allocations'),
   dividendsDeclare('dividends.declare', 'Declare dividends'),
+  dividendsApprove('dividends.approve', 'Approve dividends'),
+  dividendsPay('dividends.pay', 'Pay dividends'),
+  dividendsAdjust('dividends.adjust', 'Cancel dividends and reverse dividend payments'),
 
   reportsOperationalView('reports.operational.view', 'View operational reports'),
   reportsFinancialView('reports.financial.view', 'View financial reports'),
@@ -179,7 +195,7 @@ enum PermissionGroup {
   inventory('Inventory', ['inventory.']),
   attendance('Attendance & allowances', ['attendance.', 'allowances.', 'after_hours.']),
   payroll('Salary, payroll & losses', ['salary.', 'payroll.', 'deductions.', 'losses.']),
-  shareholders('Shareholders', ['shareholders.', 'dividends.']),
+  shareholders('Shareholders, shares & dividends', ['shareholders.', 'shares.', 'dividends.']),
   reports('Reports', ['reports.']),
   system('Audit, notifications & settings', ['audit.', 'notifications.', 'settings.']);
 
@@ -250,6 +266,10 @@ abstract final class RolePermissions {
     Permission.lossesView, Permission.lossesCreate, Permission.lossesReview, Permission.lossesSchedule,
     Permission.afterHoursApprove,
     Permission.reportsOperationalView, Permission.reportsFinancialView,
+    // Phase 7: register-level shareholder reports (totals, ownership
+    // distribution, dividend status) - no contact or identity details, no
+    // share or dividend operations unless granted.
+    Permission.shareholdersReportsView,
     Permission.notificationsView,
   };
 
@@ -284,9 +304,11 @@ abstract final class RolePermissions {
     Permission.notificationsView,
   };
 
+  // Phase 7: a shareholder sees only their OWN shareholding and dividends
+  // (shareholders.view.own), never the register or another shareholder.
   static const Set<Permission> _shareholder = {
     Permission.financeView,
-    Permission.shareholdersView, Permission.dividendsView,
+    Permission.shareholdersViewOwn,
     Permission.reportsOperationalView, Permission.reportsFinancialView,
     Permission.notificationsView,
   };
@@ -300,7 +322,7 @@ abstract final class RolePermissions {
     Permission.inventoryView, Permission.inventoryReportsView,
     Permission.attendanceView, Permission.allowancesView, Permission.payrollView,
     Permission.salaryView, Permission.salaryHistoryView, Permission.lossesView,
-    Permission.shareholdersView, Permission.dividendsView,
+    Permission.shareholdersView, Permission.shareholdersReportsView, Permission.sharesView, Permission.dividendsView,
     Permission.reportsOperationalView, Permission.reportsFinancialView,
     Permission.reportsPayrollView,
     Permission.auditView, Permission.settingsView,

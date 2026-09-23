@@ -22,6 +22,8 @@ import '../../inventory/application/inventory_providers.dart';
 import '../../jobs/application/jobs_providers.dart';
 import '../../operations/application/operations_providers.dart';
 import '../../payroll/application/workforce_providers.dart';
+import '../../shareholders/application/shareholders_providers.dart';
+import '../../../models/shareholding.dart';
 
 /// Live figures for the signed-in role, each from data the user may read.
 /// Nothing is shown for data the user has no permission to see.
@@ -103,6 +105,9 @@ class DashboardStats extends ConsumerWidget {
     // Phase 6: attendance, allowances, payroll and losses - server-written
     // records only; each figure needs the permission for its data.
     tiles.addAll(_workforceTiles(ref, can, now));
+    // Phase 7: register-level shareholder figures (no contact or identity
+    // data) and dividend status, only with the matching permission.
+    tiles.addAll(_shareholderTiles(ref, can));
     if (tiles.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(top: AppSpacing.md),
@@ -199,6 +204,31 @@ List<Widget> _workforceTiles(WidgetRef ref, bool Function(Permission) can, DateT
             label: 'Outstanding loss recoveries',
             value: Money.sum(losses.map((l) => l.outstanding)).format(),
             route: AppRoutes.losses));
+    }
+  }
+  return tiles;
+}
+
+List<Widget> _shareholderTiles(WidgetRef ref, bool Function(Permission) can) {
+  final tiles = <Widget>[];
+  if (can(Permission.shareholdersReportsView) || can(Permission.sharesView) || can(Permission.shareholdersView)) {
+    final r = ref.watch(shareRegisterProvider).value;
+    if (r != null) {
+      tiles
+        ..add(_Stat(keyName: 'stat-shareholders', label: 'Shareholders (${r.activeShareholders} active)', value: '${r.shareholderCount}',
+            route: AppRoutes.shareholders))
+        ..add(_Stat(keyName: 'stat-total-shares', label: 'Total shares', value: formatShares(r.totalShares), route: AppRoutes.shareholders))
+        ..add(_Stat(keyName: 'stat-share-capital', label: 'Share capital received', value: r.totalPaid.format(), route: AppRoutes.shareholders));
+      if (r.pendingApprovals > 0 && (can(Permission.sharesApprove) || can(Permission.sharesView))) {
+        tiles.add(_Stat(keyName: 'stat-share-approvals', label: 'Share approvals pending', value: '${r.pendingApprovals}', route: AppRoutes.shares));
+      }
+    }
+  }
+  if (can(Permission.dividendsView) || can(Permission.shareholdersReportsView)) {
+    final list = ref.watch(dividendsProvider).value;
+    if (list != null) {
+      final t = DividendTotals.of(list);
+      tiles.add(_Stat(keyName: 'stat-dividends-unpaid', label: 'Dividends unpaid', value: t.outstanding.format(), route: AppRoutes.dividends));
     }
   }
   return tiles;

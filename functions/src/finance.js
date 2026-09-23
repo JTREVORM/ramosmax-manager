@@ -25,6 +25,12 @@
 //   reversal (REVERSAL)                      mirror of the original
 //   allowance_payment (Phase 6)              out  - allowances.payAllowances
 //   payroll_payment (Phase 6)                out  - payroll.payPayroll (one entry per payroll)
+//   share_capital_contribution (Phase 7)     in   - shares.js: money a shareholder pays for shares.
+//                                                  Owners' capital: NEVER revenue (isRevenue false,
+//                                                  its own daily total shareCapitalInUgx).
+//   dividend_payment (Phase 7)               out  - dividends.payDividend (one entry per allocation).
+//                                                  A distribution to owners: NEVER an operating
+//                                                  expense (its own daily total dividendsPaidUgx).
 //
 // No overdraft: an outflow larger than the account's balance is refused.
 // ===========================================================================
@@ -47,10 +53,17 @@ export const ACCOUNT_TYPES = Object.freeze(['cash', 'mobile_money', 'bank']);
 export const TXN_TYPES = Object.freeze([
   'customer_payment', 'expense_payment', 'inventory_purchase_payment', 'account_transfer', 'bank_deposit',
   'adjustment', 'opening_balance', 'reversal', 'allowance_payment', 'payroll_payment',
+  'share_capital_contribution', 'dividend_payment',
 ]);
 
 /** Staff pay (Phase 6): reversed only from the allowance / payroll screens, which undo what the payment applied. */
 export const PAY_TXN_TYPES = Object.freeze(['allowance_payment', 'payroll_payment']);
+
+/**
+ * Owners' money (Phase 7): reversed only from the share-contribution and
+ * dividend screens, which also restore the shareholder / allocation records.
+ */
+export const OWNERSHIP_TXN_TYPES = Object.freeze(['share_capital_contribution', 'dividend_payment']);
 
 /** The accounts every installation has. Created on first use (or by ensureDefaultFinancialAccounts). */
 export const DEFAULT_ACCOUNTS = Object.freeze({
@@ -340,6 +353,8 @@ class Ledger {
       opening_balance: 'openingBalancesUgx',
       allowance_payment: 'allowancesPaidUgx',
       payroll_payment: 'payrollPaidUgx',
+      share_capital_contribution: 'shareCapitalInUgx',
+      dividend_payment: 'dividendsPaidUgx',
     }[kind];
     if (field) inc(field, amount);
     if (kind === 'adjustment') inc(toId ? 'adjustmentsInUgx' : 'adjustmentsOutUgx', amount);
@@ -897,6 +912,11 @@ export async function reverseFinancialTransaction(deps, callerUid, rawData, now 
       throw precondition(o.type === 'payroll_payment'
         ? 'Reverse the payroll payment from its payroll instead.'
         : 'Reverse the allowance payment from the allowances screen instead.', 'use_pay_reversal');
+    }
+    if (OWNERSHIP_TXN_TYPES.includes(o.type)) {
+      throw precondition(o.type === 'dividend_payment'
+        ? 'Reverse the dividend payment from its dividend instead.'
+        : 'Reverse the share contribution from the shareholder\'s share records instead.', 'use_ownership_reversal');
     }
     const spending = o.type === 'expense_payment' || o.type === 'inventory_purchase_payment';
     requirePermission(actor.perms, spending ? 'expenses.adjust' : 'finance.adjust');

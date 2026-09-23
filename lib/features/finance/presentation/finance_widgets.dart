@@ -117,6 +117,8 @@ class TransactionTile extends StatelessWidget {
           ?t.expenseNumber,
           ?t.purchaseNumber,
           ?t.payrollNumber,
+          ?t.contributionNumber,
+          ?t.dividendNumber,
           if (t.createdAt != null) DateTimeFormatter.dateTime(t.createdAt!),
           if (t.reversed) 'Reversed',
         ].join(' · ')),

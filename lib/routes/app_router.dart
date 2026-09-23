@@ -29,6 +29,10 @@ import '../features/payroll/presentation/allowance_screens.dart';
 import '../features/payroll/presentation/attendance_screens.dart';
 import '../features/payroll/presentation/loss_screens.dart';
 import '../features/payroll/presentation/payroll_screens.dart';
+import '../features/shareholders/presentation/dividend_screens.dart';
+import '../features/shareholders/presentation/my_shareholding_screen.dart';
+import '../features/shareholders/presentation/share_screens.dart';
+import '../features/shareholders/presentation/shareholder_screens.dart';
 import '../features/users/presentation/user_detail_screen.dart';
 import '../features/users/presentation/user_form_screen.dart';
 import '../features/users/presentation/user_permissions_screen.dart';
@@ -251,6 +255,36 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                   GoRoute(path: ':incidentId', builder: (_, state) => LossDetailScreen(incidentId: state.pathParameters['incidentId']!)),
                 ],
               ),
+              // Shareholders, shares and dividends (Phase 7).
+              GoRoute(
+                path: 'shareholders',
+                builder: (_, _) => const ShareholdersScreen(),
+                routes: [
+                  GoRoute(path: 'new', builder: (_, _) => const ShareholderFormScreen()),
+                  GoRoute(
+                    path: ':shareholderId',
+                    builder: (_, state) => ShareholderDetailScreen(shareholderId: state.pathParameters['shareholderId']!),
+                    routes: [
+                      GoRoute(path: 'edit', builder: (_, state) => ShareholderFormScreen(shareholderId: state.pathParameters['shareholderId'])),
+                    ],
+                  ),
+                ],
+              ),
+              GoRoute(
+                path: 'shares',
+                builder: (_, _) => const SharesScreen(),
+                routes: [
+                  GoRoute(path: 'txn/:transactionId', builder: (_, state) => ShareTransactionDetailScreen(transactionId: state.pathParameters['transactionId']!)),
+                ],
+              ),
+              GoRoute(
+                path: 'dividends',
+                builder: (_, _) => const DividendsScreen(),
+                routes: [
+                  GoRoute(path: ':dividendId', builder: (_, state) => DividendDetailScreen(dividendId: state.pathParameters['dividendId']!)),
+                ],
+              ),
+              GoRoute(path: 'my-shares', builder: (_, _) => const MyShareholdingScreen()),
               GoRoute(
                 path: 'profile/password',
                 builder: (_, _) => const ChangePasswordScreen(forced: false),

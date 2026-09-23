@@ -43,7 +43,17 @@ enum AppModule {
   payroll('payroll', 'Payroll', Icons.wallet_outlined, {Permission.payrollView, Permission.salaryView}, available: true),
   losses('losses', 'Loss Incidents', Icons.report_problem_outlined, {Permission.lossesView}, available: true),
   reports('reports', 'Reports', Icons.bar_chart_outlined, {Permission.reportsOperationalView, Permission.reportsFinancialView}),
-  dividends('dividends', 'Dividends', Icons.pie_chart_outline, {Permission.dividendsView}),
+  // Phase 7. Shareholders: the register (reports level) and, with
+  // shareholders.view, profiles. Shares: holdings, the ownership ledger and
+  // contributions. Dividends: headers with reports level, allocations and
+  // payments with dividends.view. My Shareholding: a shareholder's own records.
+  shareholders('shareholders', 'Shareholders', Icons.groups_outlined,
+      {Permission.shareholdersView, Permission.shareholdersReportsView, Permission.sharesView}, available: true),
+  shares('shares', 'Shares', Icons.donut_small_outlined, {Permission.sharesView}, available: true),
+  dividends('dividends', 'Dividends', Icons.pie_chart_outline, {Permission.dividendsView, Permission.shareholdersReportsView},
+      available: true),
+  myShareholding('my-shares', 'My Shareholding', Icons.pie_chart_outline, {Permission.shareholdersViewOwn},
+      available: true, shortLabel: 'Shares'),
   users('users', 'User Management', Icons.manage_accounts_outlined, {Permission.usersView},
       available: true, shortLabel: 'Users'),
   auditLogs('audit', 'Audit Logs', Icons.policy_outlined, {Permission.auditView}),
@@ -78,6 +88,7 @@ abstract final class RoleNavigation {
       AppModule.services, AppModule.jobs, AppModule.invoices, AppModule.payments, AppModule.receipts,
       AppModule.credit, AppModule.loyalty, AppModule.staff, AppModule.finance, AppModule.expenses,
       AppModule.inventory, AppModule.attendance, AppModule.allowances, AppModule.payroll, AppModule.losses,
+      AppModule.shareholders, AppModule.shares, AppModule.dividends,
       AppModule.reports, AppModule.users, AppModule.settings, AppModule.auditLogs,
     ],
     UserRole.manager: [
@@ -85,6 +96,7 @@ abstract final class RoleNavigation {
       AppModule.services, AppModule.invoices,
       AppModule.payments, AppModule.receipts, AppModule.credit, AppModule.loyalty, AppModule.attendance, AppModule.allowances,
       AppModule.payroll, AppModule.losses, AppModule.finance, AppModule.expenses, AppModule.inventory, AppModule.reports, AppModule.cashHandover,
+      AppModule.shareholders, AppModule.shares, AppModule.dividends,
       AppModule.users,
     ],
     UserRole.cashier: [
@@ -92,6 +104,8 @@ abstract final class RoleNavigation {
       AppModule.jobs, AppModule.services, AppModule.invoices, AppModule.payments,
       AppModule.receipts, AppModule.credit, AppModule.loyalty, AppModule.expenses, AppModule.reconciliation,
       AppModule.attendance, AppModule.allowances,
+      // Only when granted (e.g. dividends.view + dividends.pay to pay out).
+      AppModule.dividends,
     ],
     UserRole.worker: [
       AppModule.dashboard, AppModule.myJobs, AppModule.vehicles, AppModule.services,
@@ -99,7 +113,7 @@ abstract final class RoleNavigation {
     ],
     UserRole.shareholder: [
       AppModule.dashboard, AppModule.financialSummary, AppModule.businessPerformance,
-      AppModule.reports, AppModule.dividends,
+      AppModule.reports, AppModule.myShareholding,
     ],
     UserRole.auditor: [
       AppModule.dashboard, AppModule.auditLogs, AppModule.finance, AppModule.transactions, AppModule.expenses, AppModule.inventory,
@@ -107,6 +121,7 @@ abstract final class RoleNavigation {
       AppModule.reconciliation, AppModule.discrepancies, AppModule.users,
       AppModule.jobs, AppModule.invoices, AppModule.payments, AppModule.receipts, AppModule.credit,
       AppModule.loyalty, AppModule.vehicles, AppModule.customers, AppModule.services,
+      AppModule.shareholders, AppModule.shares, AppModule.dividends,
     ],
   };
 

@@ -64,6 +64,12 @@ export const NotificationType = Object.freeze({
   lossRecoveryScheduled: 'loss_recovery_scheduled',
   deductionAwaitingApproval: 'deduction_awaiting_approval',
   deductionApplied: 'deduction_applied',
+  // Phase 7: generic texts only - never a name, share count or amount.
+  shareTransactionPending: 'share_transaction_pending',
+  shareTransactionCompleted: 'share_transaction_completed',
+  dividendDeclared: 'dividend_declared',
+  dividendApproved: 'dividend_approved',
+  dividendPaid: 'dividend_paid',
 });
 
 const alreadyExists = (message, reason) => new HttpsError('already-exists', message, { reason });

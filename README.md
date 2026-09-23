@@ -14,7 +14,7 @@ decided by their role and permissions.
 | Firebase — production | `ramosmax-prod` (real business data, Firestore in `eur3`) |
 | Currency / time zone | UGX (whole shillings) / East Africa Time, UTC+3 |
 
-**Status: Phase 6 — attendance, allowances, payroll and losses.** Sign-in is phone number + password (no SMS codes). On
+**Status: Phase 7 — shareholders, shares, ownership and dividends.** Sign-in is phone number + password (no SMS codes). On
 top of the Phase 1 foundation (profile-based access control, role-aware navigation, security rules):
 
 - **Phase 2:** authorised administrators manage users, staff links, roles, permissions and temporary access in the
@@ -48,7 +48,18 @@ top of the Phase 1 foundation (profile-based access control, role-aware navigati
   - loss incidents (`RMX-LOSS-…`) whose approved recoveries are scheduled as salary deductions (`RMX-DED-…`) and
     applied only through paid payrolls; workers see only their own attendance, allowances and payslips.
 
-Later modules (cash handover, after-hours, shareholders, reports …) appear in the menus but open a "not available
+- **Phase 7:**
+  - shareholder profiles (`RMX-SHR-…`) with search by number, name, phone and status; linked shareholders see only
+    their own shareholding (My Shareholding);
+  - configurable share classes; an immutable ownership ledger (`RMX-SHR-TXN-…`) for issues, transfers, adjustments
+    and reversals, with second-person approval; ownership % and ownership on any date, calculated on the server;
+  - contributions (shares × value per share, `RMX-SHR-CON-…`) posted to the Phase 5 ledger as share capital, never
+    revenue;
+  - dividends (`RMX-DIV-…`) from an amount the business approves: record-date eligibility, allocations
+    (`RMX-DIV-PAY-…`), Administrator approval, payment as distributions (never operating expenses), guarded
+    reversals and cancellation. See SHAREHOLDERS.md, SHARES.md and DIVIDENDS.md.
+
+Later modules (cash handover, after-hours, reports …) appear in the menus but open a "not available
 yet" screen. They never show sample data.
 
 ## Quick start
@@ -100,6 +111,9 @@ Administrator created, as described in [docs/ADMIN_PROVISIONING.md](docs/ADMIN_P
 | Daily allowances: eligibility, late policy, approval, payment | [docs/ALLOWANCES.md](docs/ALLOWANCES.md) |
 | Salaries and payroll: history, formula, workflow, payment, corrections, visibility | [docs/PAYROLL.md](docs/PAYROLL.md) |
 | Loss incidents, recoveries and salary deductions | [docs/LOSSES_AND_DEDUCTIONS.md](docs/LOSSES_AND_DEDUCTIONS.md) |
+| Shareholders: profiles, search, statuses, register, self-service | [docs/SHAREHOLDERS.md](docs/SHAREHOLDERS.md) |
+| Shares: classes, issues, transfers, adjustments, contributions, ownership, history | [docs/SHARES.md](docs/SHARES.md) |
+| Dividends: declaration, record date, allocation, approval, payment, reversal | [docs/DIVIDENDS.md](docs/DIVIDENDS.md) |
 | Collections, functions, indexes, search strategy | [docs/DATA_MODEL.md](docs/DATA_MODEL.md) |
 | Firestore collections and data conventions, money, dates, audit logs | [docs/FIRESTORE_CONVENTIONS.md](docs/FIRESTORE_CONVENTIONS.md) |
 | Security rules, secrets, privacy, storage | [docs/SECURITY.md](docs/SECURITY.md) |

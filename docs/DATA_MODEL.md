@@ -166,6 +166,26 @@ and for Phase 6 `workforce.js`, `attendance.js`, `allowances.js`, `payroll.js`, 
 Audit entries hold the actor, action, record ID, before/after values of changed fields and the reason. Phone numbers
 are masked (`+256772•••456`).
 
+## Shareholders, shares and dividends (Phase 7)
+
+Details: SHAREHOLDERS.md, SHARES.md, DIVIDENDS.md. Every document here is written only by the Cloud Functions.
+
+| Collection | Key fields | Number |
+|---|---|---|
+| `shareholders/{id}` | `shareholderNumber`, `fullName`, `phoneNumber`, `email`, `address`, `idType`, `idNumber`, `status` (active/inactive/suspended/exited), `statusReason`, `joinDate`, `linkedUid`, `searchTokens`; server totals `totalShares`, `ownershipPercent`, `committedUgx`, `paidUgx`, `outstandingUgx`, `dividendsPaidUgx` | `RMX-SHR-000001` (`counters/shareholders`) |
+| `share_classes/{code}` | `code`, `name`, `description`, `valuePerShareUgx`, `active`; `issuedShares`, `committedUgx`, `paidUgx`, `outstandingUgx` | — |
+| `shareholdings/{shareholderId}_{classId}` | `shares`, `committedUgx`, `paidUgx`, `outstandingUgx`, names | — |
+| `share_transactions/{id}` | `type` (shares_issued/shares_transferred/shares_adjusted/reversal), `status` (pending_approval/posted/rejected/reversed), `applied`, `classId`, `shares`, `lines[]` {shareholderId, deltaShares, committedDeltaUgx, sharesAfter}, `shareholderIds[]`, `effectiveDate`, `acquisitionDate`, issue-only `valuePerShareUgx`/`committedUgx`/`paidUgx`/`outstandingUgx`/`paymentStatus`/`payment`, `reason`, `reference`, requested/approved by, reversal links, `requestId` | `RMX-SHR-TXN-000001` |
+| `share_contributions/{id}` | `shareholderId`, `shareTransactionId`, `amountUgx`, `source` (account/prior_record), `accountId`, `financialTransactionId`, `paymentDate`, `status` (posted/reversed), reversal fields | `RMX-SHR-CON-000001` |
+| `share_register/current` | `shareholderCount`, `statusCounts`, `totalShares`, `holderCount`, `holders[]` (distribution), `byClass`, `totalCommittedUgx`, `totalPaidUgx`, `outstandingUgx`, `pendingApprovals` | — |
+| `dividends/{id}` | `financialPeriod`, `declarationDate`, `recordDate`, `paymentDate`, `calculationMethod` (pool/per_share), `totalDistributableUgx`, `dividendPerShareUgx`, `classId`, `status`, `eligibleShares`, `allocatedUgx`, `unallocatedUgx`, `paidUgx`, `outstandingUgx`, `recordLocked`, `snapshot`, declared/approved/cancelled by | `RMX-DIV-000001` |
+| `dividend_allocations/{id}` | `dividendId`, `shareholderId`, `sharesAtRecordDate`, `ownershipPercentAtRecordDate`, `dividendPerShareUgx`, `grossUgx`, `deductionsUgx` (0), `netUgx`, `paymentStatus` (unpaid/paid/not_payable), `current`, payment and reversal fields | `RMX-DIV-PAY-000001` |
+| `settings/share_policy` | `requireApproval` (true), `allowUnpaidShares` (false), `allowPartialPayment` (false) | — |
+| `settings/dividend_policy` | `requireAdminApproval` (true) | — |
+
+`unique_keys` gains the `shareholder_phone_…`, `shareholder_id_…` and `shareholder_uid_…` reservations. The reserved
+Phase 1 name `shares` stays unused.
+
 ## Indexes
 
 Declared in `firebase/firestore.indexes.json`. Single-field queries (plate prefix on `normalizedNumberPlate`,
@@ -175,6 +195,13 @@ use Firestore's automatic indexes.
 | Collection | Fields | Used for |
 |---|---|---|
 | `customers` | `status` ↑, `createdAt` ↓ | Customer list filtered by Active/Inactive |
+| `shareholders` | `status` ↑, `shareholderNumber` ↑ | Phase 7: register list filtered by status; active-shareholder pickers |
+| `share_transactions` | `status` ↑, `createdAt` ↓ | Phase 7: pending approvals |
+| `share_transactions` | `type` ↑, `createdAt` ↓ | Phase 7: issues / transfers / adjustments / reversals filters |
+| `share_transactions` | `shareholderIds` array-contains, `createdAt` ↓ | Phase 7: one shareholder's history |
+| `share_contributions` | `shareholderId` ↑, `createdAt` ↓ | Phase 7: one shareholder's contributions |
+| `dividend_allocations` | `dividendId` ↑, `current` ↑, `shareholderName` ↑ | Phase 7: a dividend's allocations |
+| `dividend_allocations` | `shareholderId` ↑, `current` ↑, `createdAt` ↓ | Phase 7: one shareholder's dividend history |
 | `service_intakes` | `vehicleId` ↑, `status` ↑ | "Already has a service in progress" check |
 | `service_intakes` | `vehicleId` ↑, `createdAt` ↓ | Vehicle service activity |
 | `service_intakes` | `customerId` ↑, `createdAt` ↓ | Customer history |

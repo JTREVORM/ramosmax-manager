@@ -207,3 +207,50 @@ granted to someone else.
 **Menus:** Attendance and Allowances are added for Admins, Cashiers and Auditors; Payroll and Loss Incidents for
 Managers; Loss Incidents for Admins and Auditors. For people who only see their own records, **Allowances** opens
 **My pay** (allowances, payslips, salary, deductions). The Worker menu is unchanged.
+
+## Phase 7 changes
+
+**Added (14 permissions):** `shareholders.view.own`, `shareholders.create`, `shareholders.update`,
+`shareholders.reports.view`, `shares.view`, `shares.issue`, `shares.transfer`, `shares.adjust`, `shares.approve`,
+`dividends.create`, `dividends.calculate`, `dividends.approve`, `dividends.pay`, `dividends.adjust`.
+
+**Kept (Phase 1 names):** `shareholders.view` (profiles, including contact and identification details),
+`shareholders.manage` (status changes, sign-in links, share classes), `dividends.view` (dividends and every
+allocation), `dividends.declare` (draft → declared).
+
+| Role | Phase 7 defaults |
+|---|---|
+| Admin | Everything |
+| Manager | `shareholders.reports.view` only: register totals, ownership distribution and dividend headers. No contact or identity details and no share or dividend operations unless granted |
+| Cashier | Nothing. Can be granted e.g. `dividends.view` + `dividends.pay` to pay approved dividends |
+| Worker | Nothing |
+| Auditor | `shareholders.view`, `shareholders.reports.view`, `shares.view`, `dividends.view`. Read-only |
+| Shareholder | **Changed:** `shareholders.view` and `dividends.view` removed; `shareholders.view.own` added. With real data those two would have let every shareholder read every other shareholder's records. Their own profile, shares, contributions and approved dividends come from `getMyShareholding`. `finance.view` and the report permissions are unchanged |
+
+**Separation of duties:**
+
+- A share transaction is approved by someone other than the requester, and never by the person whose linked
+  shareholding it changes. Administrators are excepted.
+- By default only an Administrator approves dividends (`settings/dividend_policy`). With that switched off, the
+  declarer cannot approve, and nobody approves or pays a dividend to their own linked shareholding.
+
+| Callable | Permission |
+|---|---|
+| `createShareholder` / `updateShareholder` | `shareholders.create` / `shareholders.update` |
+| `setShareholderStatus`, `linkShareholderAccount`, `createShareClass`, `updateShareClass` | `shareholders.manage` |
+| `updateShareholdingPolicy` | `settings.manage` |
+| `getMyShareholding` | `shareholders.view.own` |
+| `issueShares`, `recordShareContribution` | `shares.issue` |
+| `transferShares` | `shares.transfer` |
+| `adjustShares`, `reverseShareTransaction`, `reverseShareContribution` | `shares.adjust` |
+| `decideShareTransaction` | `shares.approve` |
+| `getOwnershipAsOf` | `shares.view` or `shareholders.reports.view` |
+| `createDividend`, `updateDividend` | `dividends.create` |
+| `calculateDividend` | `dividends.calculate` |
+| `updateDividendStatus` | `dividends.declare` (declare) / `dividends.approve` (approve, return) |
+| `payDividend` | `dividends.pay` |
+| `reverseDividendPayment`, `cancelDividend` | `dividends.adjust` |
+
+Menus: Admin, Manager and Auditor get **Shareholders** and **Dividends**; Admin and Auditor also get **Shares** (it
+needs `shares.view`). The Shareholder role gets **My Shareholding** instead of the old placeholder Dividends entry. A
+cashier sees **Dividends** only when granted `dividends.view`.

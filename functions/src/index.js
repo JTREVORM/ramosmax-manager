@@ -2,8 +2,8 @@
 // RamosMAX Cloud Functions - entry point
 // ===========================================================================
 // Callable functions for sign-in, user administration, operations, billing,
-// loyalty, finance, expenses, inventory, attendance, allowances, payroll and
-// losses. Except for
+// loyalty, finance, expenses, inventory, attendance, allowances, payroll,
+// losses, shareholders, shares and dividends. Except for
 // `signInWithPhonePassword` (which is how a session starts), the caller's
 // identity comes from the verified Firebase ID token that the Functions
 // runtime checks before our code runs. Everything else is decided on the
@@ -32,6 +32,7 @@ import { makeNotifier } from './notify.js';
 import * as allowances from './allowances.js';
 import * as attendance from './attendance.js';
 import * as billing from './billing.js';
+import * as dividends from './dividends.js';
 import * as expenses from './expenses.js';
 import * as finance from './finance.js';
 import * as inventory from './inventory.js';
@@ -41,6 +42,8 @@ import * as loyalty from './loyalty.js';
 import * as ops from './operations.js';
 import * as payroll from './payroll.js';
 import * as session from './session.js';
+import * as shareholders from './shareholders.js';
+import * as shares from './shares.js';
 import * as admin from './user_admin.js';
 import * as workforce from './workforce.js';
 
@@ -188,6 +191,31 @@ export const cancelLossIncident = callable('cancelLossIncident', losses.cancelLo
 export const createSalaryDeduction = callable('createSalaryDeduction', losses.createSalaryDeduction);
 export const decideSalaryDeduction = callable('decideSalaryDeduction', losses.decideSalaryDeduction);
 export const cancelSalaryDeduction = callable('cancelSalaryDeduction', losses.cancelSalaryDeduction);
+
+// Shareholders, shares, ownership and dividends (Phase 7).
+export const createShareholder = callable('createShareholder', shareholders.createShareholder);
+export const updateShareholder = callable('updateShareholder', shareholders.updateShareholder);
+export const setShareholderStatus = callable('setShareholderStatus', shareholders.setShareholderStatus);
+export const linkShareholderAccount = callable('linkShareholderAccount', shareholders.linkShareholderAccount);
+export const createShareClass = callable('createShareClass', shareholders.createShareClass);
+export const updateShareClass = callable('updateShareClass', shareholders.updateShareClass);
+export const updateShareholdingPolicy = callable('updateShareholdingPolicy', shareholders.updateShareholdingPolicy);
+export const getMyShareholding = callable('getMyShareholding', shareholders.getMyShareholding);
+export const issueShares = callable('issueShares', shares.issueShares);
+export const transferShares = callable('transferShares', shares.transferShares);
+export const adjustShares = callable('adjustShares', shares.adjustShares);
+export const decideShareTransaction = callable('decideShareTransaction', shares.decideShareTransaction);
+export const recordShareContribution = callable('recordShareContribution', shares.recordShareContribution);
+export const reverseShareContribution = callable('reverseShareContribution', shares.reverseShareContribution);
+export const reverseShareTransaction = callable('reverseShareTransaction', shares.reverseShareTransaction);
+export const getOwnershipAsOf = callable('getOwnershipAsOf', shares.getOwnershipAsOf);
+export const createDividend = callable('createDividend', dividends.createDividend);
+export const updateDividend = callable('updateDividend', dividends.updateDividend);
+export const calculateDividend = callable('calculateDividend', dividends.calculateDividend);
+export const updateDividendStatus = callable('updateDividendStatus', dividends.updateDividendStatus);
+export const payDividend = callable('payDividend', dividends.payDividend);
+export const reverseDividendPayment = callable('reverseDividendPayment', dividends.reverseDividendPayment);
+export const cancelDividend = callable('cancelDividend', dividends.cancelDividend);
 
 // Recurring bills: creates due items (draft expenses) and reminders. Never pays.
 export const sweepRecurringExpenses = onSchedule(

@@ -627,3 +627,108 @@ describe('attendance, allowances, salary, payroll and losses (Phase 6)', () => {
     await assertFails(getDoc(doc(anon, 'settings/payroll_policy')));
   });
 });
+
+describe('shareholders, shares and dividends (Phase 7)', () => {
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      const put = (path, data) => setDoc(doc(db, path), data);
+      await put('shareholders/s1', { shareholderNumber: 'RMX-SHR-000001', fullName: 'John Okello', phoneNumber: '+256772100001', linkedUid: 'shareholder', totalShares: 100 });
+      await put('shareholders/s2', { shareholderNumber: 'RMX-SHR-000002', fullName: 'Mary Nakato', totalShares: 50 });
+      await put('share_classes/ordinary', { code: 'ORDINARY', valuePerShareUgx: 10000, issuedShares: 150 });
+      await put('shareholdings/s1_ordinary', { shareholderId: 's1', classId: 'ordinary', shares: 100 });
+      await put('share_transactions/t1', { transactionNumber: 'RMX-SHR-TXN-000001', type: 'shares_issued', shareholderIds: ['s1'], status: 'posted' });
+      await put('share_contributions/c1', { contributionNumber: 'RMX-SHR-CON-000001', shareholderId: 's1', amountUgx: 1000000, status: 'posted' });
+      await put('share_register/current', { totalShares: 150, holders: [{ shareholderId: 's1', shares: 100 }] });
+      await put('dividends/d1', { dividendNumber: 'RMX-DIV-000001', status: 'approved', allocatedUgx: 1500000 });
+      await put('dividend_allocations/a1', { allocationNumber: 'RMX-DIV-PAY-000001', dividendId: 'd1', shareholderId: 's1', netUgx: 1000000 });
+      await put('settings/share_policy', { requireApproval: true, allowUnpaidShares: false, allowPartialPayment: false });
+    });
+  });
+
+  const read = (uid, path) => getDoc(doc(as(uid), path));
+  const ALL = ['admin', 'manager', 'cashier', 'worker', 'auditor', 'shareholder', 'inactiveAdmin', 'pendingAdmin', 'expiredAdmin'];
+  const canRead = {
+    // Profiles (contact and identification details): shareholders.view only.
+    'shareholders/s1': ['admin', 'auditor'],
+    'shareholders/s2': ['admin', 'auditor'],
+    'share_classes/ordinary': ['admin', 'manager', 'auditor'],
+    'shareholdings/s1_ordinary': ['admin', 'auditor'],
+    'share_transactions/t1': ['admin', 'auditor'],
+    'share_contributions/c1': ['admin', 'auditor'],
+    // Register-level totals and distribution: managers see it through shareholders.reports.view.
+    'share_register/current': ['admin', 'manager', 'auditor'],
+    'dividends/d1': ['admin', 'manager', 'auditor'],
+    'dividend_allocations/a1': ['admin', 'auditor'],
+    'settings/share_policy': ['admin', 'manager', 'cashier', 'worker', 'auditor', 'shareholder'],
+  };
+
+  for (const [path, allowed] of Object.entries(canRead)) {
+    test(`read ${path}: ${allowed.join(', ')} only; never unauthenticated`, async () => {
+      for (const uid of ALL) {
+        if (allowed.includes(uid)) await assertSucceeds(read(uid, path));
+        else await assertFails(read(uid, path));
+      }
+      await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(), path)));
+    });
+  }
+
+  test('a shareholder cannot read or query any shareholder record directly - not even their own (served by getMyShareholding)', async () => {
+    const db = as('shareholder');
+    await assertFails(getDoc(doc(db, 'shareholders/s1')));
+    await assertFails(getDocs(query(collection(db, 'shareholders'), where('linkedUid', '==', 'shareholder'))));
+    await assertFails(getDocs(collection(db, 'shareholders')));
+    await assertFails(getDocs(query(collection(db, 'share_transactions'), where('shareholderIds', 'array-contains', 's2'))));
+    await assertFails(getDocs(query(collection(db, 'dividend_allocations'), where('shareholderId', '==', 's2'))));
+    await assertFails(getDocs(collection(db, 'dividend_allocations')));
+  });
+
+  test('workers and cashiers see no shareholder data at all', async () => {
+    for (const uid of ['worker', 'cashier']) {
+      for (const c of ['shareholders', 'share_classes', 'shareholdings', 'share_transactions', 'share_contributions', 'share_register', 'dividends',
+        'dividend_allocations']) {
+        await assertFails(getDocs(collection(as(uid), c)));
+      }
+    }
+  });
+
+  test('no client - admin included - may write shareholders, ownership, totals, dividends, allocations or payment status', async () => {
+    for (const uid of ['admin', 'manager', 'cashier', 'worker', 'auditor', 'shareholder']) {
+      const db = as(uid);
+      await assertFails(setDoc(doc(db, `shareholders/${uid}-new`), { fullName: 'Forged', totalShares: 1000 }));
+      await assertFails(updateDoc(doc(db, 'shareholders/s1'), { ownershipPercent: 99, totalShares: 9999 }));
+      await assertFails(deleteDoc(doc(db, 'shareholders/s2')));
+      await assertFails(updateDoc(doc(db, 'share_classes/ordinary'), { valuePerShareUgx: 1 }));
+      await assertFails(setDoc(doc(db, 'shareholdings/s2_ordinary'), { shareholderId: 's2', shares: 1000000 }));
+      await assertFails(addDoc(collection(db, 'share_transactions'), { type: 'shares_issued', shares: 1000, status: 'posted' }));
+      await assertFails(updateDoc(doc(db, 'share_transactions/t1'), { status: 'reversed' }));
+      await assertFails(deleteDoc(doc(db, 'share_transactions/t1')));
+      await assertFails(addDoc(collection(db, 'share_contributions'), { amountUgx: 1, status: 'posted' }));
+      await assertFails(updateDoc(doc(db, 'share_register/current'), { totalShares: 1 }));
+      await assertFails(updateDoc(doc(db, 'dividends/d1'), { allocatedUgx: 99_000_000, status: 'paid' }));
+      await assertFails(addDoc(collection(db, 'dividend_allocations'), { dividendId: 'd1', shareholderId: 's2', netUgx: 50_000_000 }));
+      await assertFails(updateDoc(doc(db, 'dividend_allocations/a1'), { paymentStatus: 'paid', netUgx: 1 }));
+      await assertFails(deleteDoc(doc(db, 'dividend_allocations/a1')));
+      await assertFails(setDoc(doc(db, 'settings/share_policy'), { requireApproval: false }));
+      await assertFails(setDoc(doc(db, 'counters/share_transactions'), { next: 1 }));
+    }
+  });
+
+  test('granted permissions open exactly their level; a denial removes it', async () => {
+    await env.withSecurityRulesDisabled((ctx) => updateDoc(doc(ctx.firestore(), 'users/cashier'), { permissions: ['dividends.pay', 'dividends.view'] }));
+    await assertSucceeds(read('cashier', 'dividend_allocations/a1'));
+    await assertFails(read('cashier', 'shareholders/s1'));
+    await env.withSecurityRulesDisabled((ctx) => updateDoc(doc(ctx.firestore(), 'users/manager'), { deniedPermissions: ['shareholders.reports.view'] }));
+    await assertFails(read('manager', 'share_register/current'));
+    await assertFails(read('manager', 'dividends/d1'));
+  });
+
+  test('unauthenticated clients can neither read nor write any of it', async () => {
+    const anon = env.unauthenticatedContext().firestore();
+    for (const c of ['shareholders', 'share_classes', 'shareholdings', 'share_transactions', 'share_contributions', 'share_register', 'dividends',
+      'dividend_allocations']) {
+      await assertFails(getDocs(collection(anon, c)));
+      await assertFails(setDoc(doc(anon, `${c}/x`), { any: 1 }));
+    }
+  });
+});

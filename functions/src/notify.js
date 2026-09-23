@@ -30,6 +30,12 @@ const TEXT = {
   [NotificationType.lossRecoveryScheduled]: ['Recovery scheduled', 'A recovery from your pay has been scheduled. Open RamosMAX for details.'],
   [NotificationType.deductionAwaitingApproval]: ['Deduction to approve', 'A salary deduction is waiting for approval. Open RamosMAX for details.'],
   [NotificationType.deductionApplied]: ['Deduction applied', 'A deduction was applied to your pay. Open RamosMAX to see your payslip.'],
+  // Phase 7: generic on purpose - never a shareholder name, share count or amount.
+  [NotificationType.shareTransactionPending]: ['Share transaction to approve', 'A share transaction is waiting for approval. Open RamosMAX to review it.'],
+  [NotificationType.shareTransactionCompleted]: ['Share transaction completed', 'A share transaction you requested has been decided. Open RamosMAX for details.'],
+  [NotificationType.dividendDeclared]: ['Dividend to approve', 'A dividend has been declared and is waiting for approval. Open RamosMAX to review it.'],
+  [NotificationType.dividendApproved]: ['Dividend approved', 'A dividend has been approved and is ready to pay. Open RamosMAX for details.'],
+  [NotificationType.dividendPaid]: ['Dividend paid', 'A dividend payment to you has been recorded. Open RamosMAX to see your shareholding.'],
 };
 
 /** Android channel declared in the app manifest. */

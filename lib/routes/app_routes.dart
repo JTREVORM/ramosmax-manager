@@ -85,6 +85,18 @@ abstract final class AppRoutes {
   static const String losses = '$home/losses';
   static String lossDetail(String id) => '$losses/$id';
 
+  // Shareholders, shares and dividends (Phase 7), nested under their modules;
+  // each screen checks the finer permission it needs.
+  static const String shareholders = '$home/shareholders';
+  static const String newShareholder = '$shareholders/new';
+  static String shareholderDetail(String id) => '$shareholders/$id';
+  static String editShareholder(String id) => '$shareholders/$id/edit';
+  static const String shares = '$home/shares';
+  static String shareTransaction(String id) => '$shares/txn/$id';
+  static const String dividends = '$home/dividends';
+  static String dividendDetail(String id) => '$dividends/$id';
+  static const String myShareholding = '$home/my-shares';
+
   // User management (Phase 2). Nested under the `users` module so the guard's
   // module check (users.view) covers every sub-screen; each screen then
   // checks the finer permission it needs, and the Cloud Functions enforce it.

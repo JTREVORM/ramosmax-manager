@@ -53,6 +53,18 @@ Phase 6 adds, through the same path (text is generic — never a name, salary or
 | `loss_recovery_scheduled` | The staff member a recovery was scheduled for |
 | `deduction_awaiting_approval` | Holders of `payroll.approve` |
 
+Phase 7 adds (generic text — never a shareholder name, share count or amount):
+
+| Type | Sent to |
+|---|---|
+| `share_transaction_pending` | Holders of `shares.approve` (not the requester) when an issue / transfer / adjustment waits for approval |
+| `share_transaction_completed` | The requester, when their share transaction is approved or rejected |
+| `dividend_declared` | Holders of `dividends.approve` |
+| `dividend_approved` | Holders of `dividends.pay` |
+| `dividend_paid` | The shareholder's **linked** sign-in, if any (record ID = their allocation) |
+
+Analytics events `shareholder_action`, `share_action` and `dividend_action` carry only an action key.
+
 Workers only ever receive notifications about themselves. Auditors receive none by default. The Phase 6 Analytics
 events `attendance_action`, `allowance_action`, `payroll_action` and `loss_action` carry only an action key in
 `outcome`, never a salary, amount or name.
