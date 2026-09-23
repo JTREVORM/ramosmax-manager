@@ -1,0 +1,78 @@
+{
+  "firestore": {
+    "database": "(default)",
+    "location": "eur3",
+    "rules": "firebase/firestore.rules",
+    "indexes": "firebase/firestore.indexes.json"
+  },
+  "storage": {
+    "rules": "firebase/storage.rules"
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "runtime": "nodejs22",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "test",
+        "firebase-debug.log",
+        "*.local"
+      ]
+    }
+  ],
+  "emulators": {
+    "auth": {
+      "port": 9099
+    },
+    "firestore": {
+      "port": 8080
+    },
+    "functions": {
+      "port": 5001
+    },
+    "storage": {
+      "port": 9199
+    },
+    "ui": {
+      "enabled": false
+    },
+    "singleProjectMode": true
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "buildConfigurations": {
+          "src/dev": {
+            "projectId": "ramos1-c0862",
+            "appId": "1:499633828471:android:b5a9031ab77245debd4c72",
+            "fileOutput": "android/app/src/dev/google-services.json"
+          },
+          "src/prod": {
+            "projectId": "ramosmax-prod",
+            "appId": "1:45256762562:android:3fb9cb4787d8f6fa71875b",
+            "fileOutput": "android/app/src/prod/google-services.json"
+          }
+        }
+      },
+      "dart": {
+        "lib/core/config/firebase/firebase_options_dev.dart": {
+          "projectId": "ramos1-c0862",
+          "configurations": {
+            "android": "1:499633828471:android:b5a9031ab77245debd4c72",
+            "ios": "1:499633828471:ios:e50f4254115f263ebd4c72",
+            "web": "1:499633828471:web:88f7ef96aad7d431bd4c72"
+          }
+        },
+        "lib/core/config/firebase/firebase_options_prod.dart": {
+          "projectId": "ramosmax-prod",
+          "configurations": {
+            "android": "1:45256762562:android:3fb9cb4787d8f6fa71875b",
+            "ios": "1:45256762562:ios:e6a1a8493df83eac71875b"
+          }
+        }
+      }
+    }
+  }
+}

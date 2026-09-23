@@ -1,0 +1,93 @@
+# ===========================================================================
+# RamosMAX — files that must never be committed
+# ===========================================================================
+
+# --- Secrets & signing -------------------------------------------------------
+# Android upload keystore and its passwords.
+android/key.properties
+*.jks
+*.keystore
+# Apple signing material.
+*.p12
+*.p8
+*.cer
+*.mobileprovision
+*.provisionprofile
+# Service-account / admin credentials (used only by tool/admin).
+**/service-account*.json
+**/serviceAccount*.json
+**/*-firebase-adminsdk-*.json
+**/credentials*.json
+# Environment files.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+# Local token caches.
+tool/admin/.secrets/
+
+# NOTE: google-services.json, GoogleService-Info.plist and
+# lib/core/config/firebase/firebase_options_*.dart ARE committed deliberately.
+# They contain public client identifiers (API keys restricted by Firebase
+# Security Rules and app registration), not secrets. See docs/SECURITY.md.
+
+# --- Miscellaneous -----------------------------------------------------------
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# --- IDE ---------------------------------------------------------------------
+*.iml
+*.ipr
+*.iws
+.idea/
+# .vscode/ is intentionally tracked for shared launch configurations.
+
+# --- Flutter / Dart ----------------------------------------------------------
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+.widget_preview/
+
+# Symbolication / obfuscation output (upload to Crashlytics, don't commit).
+app.*.symbols
+app.*.map.json
+/build/symbols/
+
+# Android build artefacts.
+/android/app/debug
+/android/app/profile
+/android/app/release
+/android/app/dev
+/android/app/prod
+
+# Firebase CLI caches and emulator data.
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+database-debug.log
+pubsub-debug.log
+emulator-data/
+
+# Node (admin tooling, Cloud Functions).
+node_modules/
+functions/.runtimeconfig.json
+functions/*.local
+functions/.env*
+!functions/.env.example

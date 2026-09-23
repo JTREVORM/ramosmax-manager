@@ -1,0 +1,7 @@
+{
+  "projects": {
+    "default": "ramos1-c0862",
+    "development": "ramos1-c0862",
+    "production": "ramosmax-prod"
+  }
+}

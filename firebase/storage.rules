@@ -1,0 +1,125 @@
+rules_version = '2';
+
+// ===========================================================================
+// RamosMAX Automotive Care (U) Ltd - Firebase Storage Security Rules
+// ===========================================================================
+// DEFAULT DENY. No object in this bucket is public. Every path below is
+// mirrored by a constant in lib/core/constants/storage_paths.dart.
+//
+// Role checks read the caller's Firestore profile (users/{uid}) so Storage
+// and Firestore share one source of truth for who is active and what role
+// they hold. Deployed identically to development and production.
+// ===========================================================================
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function profile() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isActive() {
+      return isSignedIn()
+        && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
+        && profile().active == true
+        // A pending temporary-password change blocks everything (as in
+        // firestore.rules isActive()).
+        && profile().get('mustChangePassword', false) != true;
+    }
+
+    function hasRole(roles) {
+      return isActive() && profile().role in roles;
+    }
+
+    function isImage() {
+      return request.resource.contentType.matches('image/.*');
+    }
+
+    function isDocument() {
+      return request.resource.contentType.matches('image/.*')
+        || request.resource.contentType == 'application/pdf';
+    }
+
+    function underMb(mb) {
+      return request.resource.size < mb * 1024 * 1024;
+    }
+
+    // Staff profile photos: /staff/{staffId}/profile/{file}
+    // Visible to active users (photos appear on job cards); writable only by
+    // administrators and managers until Phase 2 adds self-service.
+    match /staff/{staffId}/profile/{fileName} {
+      allow read: if isActive();
+      allow write: if hasRole(['admin', 'manager']) && isImage() && underMb(5);
+    }
+
+    // Sensitive staff documents: national ID, contracts, certificates.
+    // /staff/{staffId}/documents/{category}/{file}
+    // Admin only. Never readable by other staff, cashiers or shareholders.
+    match /staff/{staffId}/documents/{category}/{fileName} {
+      allow read: if hasRole(['admin']);
+      allow write: if hasRole(['admin']) && isDocument() && underMb(10);
+      allow delete: if false;
+    }
+
+    // Expense receipts: /expenses/{expenseId}/receipts/{file}
+    // Evidence for financial records - uploads are allowed, deletion is not.
+    match /expenses/{expenseId}/receipts/{fileName} {
+      allow read: if hasRole(['admin', 'manager', 'auditor']);
+      allow create: if hasRole(['admin', 'manager']) && isDocument() && underMb(10);
+      allow update, delete: if false;
+    }
+
+    // Inventory documents: /inventory/{itemId}/documents/{file}
+    match /inventory/{itemId}/documents/{fileName} {
+      allow read: if hasRole(['admin', 'manager', 'auditor']);
+      allow create: if hasRole(['admin', 'manager']) && isDocument() && underMb(10);
+      allow update, delete: if false;
+    }
+
+    // Phase 5 evidence: deposit slips, reconciliation statements, expense
+    // receipts and supplier invoices.
+    // /finance_uploads/{kind}/{uploadId}/{file}, kind one of the four below.
+    // Uploaded by the app BEFORE the Cloud Function call that records the
+    // transaction; the function accepts only a path under this prefix.
+    // Evidence is never replaced or deleted.
+    match /finance_uploads/{kind}/{uploadId}/{fileName} {
+      allow read: if hasRole(['admin', 'manager', 'auditor']);
+      allow create: if hasRole(['admin', 'manager', 'cashier'])
+        && kind in ['deposits', 'reconciliations', 'expenses', 'purchases']
+        && isDocument() && underMb(10);
+      allow update, delete: if false;
+    }
+
+    // Phase 6 evidence about employees: attendance evidence (e.g. a sick
+    // note for an excused absence), loss-incident evidence and payroll
+    // supporting documents.
+    // /payroll_uploads/{kind}/{uploadId}/{file}, kind one of the three below.
+    // Uploaded by an Administrator or Manager BEFORE the Cloud Function call
+    // that records it; the function accepts only a path under this prefix.
+    // Sensitive: never readable by cashiers, workers or shareholders, never
+    // replaced or deleted.
+    match /payroll_uploads/{kind}/{uploadId}/{fileName} {
+      allow read: if hasRole(['admin', 'manager', 'auditor']);
+      allow create: if hasRole(['admin', 'manager'])
+        && kind in ['attendance', 'losses', 'payroll']
+        && isDocument() && underMb(10);
+      allow update, delete: if false;
+    }
+
+    // General business documents: /business/{category}/{file}
+    match /business/{category}/{fileName} {
+      allow read: if hasRole(['admin', 'manager', 'auditor', 'shareholder']);
+      allow create: if hasRole(['admin']) && isDocument() && underMb(20);
+      allow update, delete: if false;
+    }
+
+    // Everything else is denied.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

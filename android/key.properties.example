@@ -1,0 +1,10 @@
+# ---------------------------------------------------------------------------
+# Template for android/key.properties — COPY, DO NOT COMMIT THE REAL FILE.
+# ---------------------------------------------------------------------------
+# `android/key.properties` is git-ignored. Create it from this template on the
+# machine that produces Play Store releases. See docs/DEPLOYMENT_ANDROID.md.
+storePassword=CHANGE_ME
+keyPassword=CHANGE_ME
+keyAlias=ramosmax-upload
+# Absolute path to the keystore, or a path relative to android/app/.
+storeFile=C:/secure/ramosmax-upload-keystore.jks

@@ -1,0 +1,5 @@
+#include "Generated.xcconfig"
+
+// Release and Profile builds ship the PRODUCTION bundle ID with no suffix:
+// com.ramosmax.automotive — the identity registered with App Store Connect.
+RAMOSMAX_BUNDLE_SUFFIX =

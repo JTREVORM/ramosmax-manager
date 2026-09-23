@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "45256762562",
+    "project_id": "ramosmax-prod",
+    "storage_bucket": "ramosmax-prod.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:45256762562:android:3fb9cb4787d8f6fa71875b",
+        "android_client_info": {
+          "package_name": "com.ramosmax.automotive"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB034yhnKe0xHiABc1HusaWOWl72NeMBPI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

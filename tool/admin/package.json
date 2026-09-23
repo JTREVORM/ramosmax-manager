@@ -1,0 +1,13 @@
+{
+  "name": "ramosmax-admin-tools",
+  "private": true,
+  "type": "module",
+  "description": "Trusted server-side provisioning for RamosMAX (never shipped in the app).",
+  "scripts": {
+    "provision": "node provision.mjs"
+  },
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "firebase-admin": "^14.4.0"
+  }
+}

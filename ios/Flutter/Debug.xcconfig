@@ -1,0 +1,6 @@
+#include "Generated.xcconfig"
+
+// RamosMAX environment suffix appended to PRODUCT_BUNDLE_IDENTIFIER.
+// Debug builds target the DEVELOPMENT Firebase project, whose registered iOS
+// bundle ID is com.ramosmax.automotive.dev. See docs/ENVIRONMENTS.md.
+RAMOSMAX_BUNDLE_SUFFIX = .dev

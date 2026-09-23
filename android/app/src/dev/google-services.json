@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "499633828471",
+    "project_id": "ramos1-c0862",
+    "storage_bucket": "ramos1-c0862.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:499633828471:android:043950189af036c2bd4c72",
+        "android_client_info": {
+          "package_name": "com.example.ramosmax_auto_manager"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBJv27cCTzsyoH251MPDtLqK3SDhtFnP_Y"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:499633828471:android:b5a9031ab77245debd4c72",
+        "android_client_info": {
+          "package_name": "com.ramosmax.automotive.dev"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBJv27cCTzsyoH251MPDtLqK3SDhtFnP_Y"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

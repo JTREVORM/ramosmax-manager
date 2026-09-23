@@ -1,0 +1,635 @@
+rules_version = '2';
+
+// ===========================================================================
+// RamosMAX Automotive Care (U) Ltd - Cloud Firestore Security Rules
+// ===========================================================================
+// Posture: DEFAULT DENY. Nothing is readable or writable unless a rule below
+// explicitly allows it. Phase 1 only opens the surface that authentication and
+// session bootstrap actually need; every later phase adds its own narrowly
+// scoped match block.
+//
+// The Flutter client is untrusted. Role and permission checks here are the
+// authoritative gate - the UI hiding a button is a convenience, never a
+// control. The permission catalogue mirrored below is defined in Dart at
+// lib/core/auth/permissions.dart; the two MUST be kept in sync.
+//
+// These same rules are deployed to BOTH the development and the production
+// project. There is deliberately no relaxed "development" variant, so a
+// permissive rule can never be promoted to production by accident.
+// ===========================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // -----------------------------------------------------------------
+    // Identity helpers
+    // -----------------------------------------------------------------
+
+    function isSignedIn() {
+      return request.auth != null && request.auth.uid != null;
+    }
+
+    function userPath() {
+      return /databases/$(database)/documents/users/$(request.auth.uid);
+    }
+
+    function userExists() {
+      return isSignedIn() && exists(userPath());
+    }
+
+    function userDoc() {
+      return get(userPath()).data;
+    }
+
+    // A RamosMAX session requires BOTH a Firebase Auth sign-in (phone number +
+    // password, verified by the signInWithPhonePassword function) AND an
+    // active business profile. Being signed in on its own grants nothing.
+    // An optional `accessExpiresAt` ends the whole account's access (e.g. at
+    // contract end) without anyone having to remember to deactivate it.
+    //
+    // `mustChangePassword` (set when an administrator issues a temporary
+    // password) also counts as inactive: until the person replaces it through
+    // the changeOwnPassword function they can read their own profile and
+    // nothing else, so the forced change cannot be skipped by a modified app.
+    function isActive() {
+      return userExists()
+        && userDoc().active == true
+        && userDoc().get('mustChangePassword', false) != true
+        && (userDoc().get('accessExpiresAt', null) == null
+            || userDoc().accessExpiresAt > request.time);
+    }
+
+    function role() {
+      return isActive() ? userDoc().role : 'none';
+    }
+
+    function isAdmin() {
+      return role() == 'admin';
+    }
+
+    // -----------------------------------------------------------------
+    // Permission resolution
+    // -----------------------------------------------------------------
+    // Effective permission =
+    //     ( granted by role  OR  granted directly  OR  granted temporarily )
+    //   AND NOT explicitly denied for this user.
+    //
+    // `temporaryPermissions` maps permission -> {startsAt, expiresAt, grantId}
+    // (Phase 2), or permission -> expiry Timestamp (Phase 1 format, still
+    // honoured). A grant is effective only inside its window, so it starts
+    // and stops being honoured on time with no cleanup job required. This is
+    // what makes "temporary permissions must automatically expire" hold
+    // server-side. The window is written only by the Cloud Functions.
+
+    function deniedPermissions() {
+      return userDoc().get('deniedPermissions', []);
+    }
+
+    function directPermissions() {
+      return userDoc().get('permissions', []);
+    }
+
+    function temporaryPermissions() {
+      return userDoc().get('temporaryPermissions', {});
+    }
+
+    function hasTemporary(permission) {
+      let temp = temporaryPermissions();
+      return permission in temp && (
+        (temp[permission] is timestamp && temp[permission] > request.time)
+        || (temp[permission] is map
+            && temp[permission].startsAt <= request.time
+            && temp[permission].expiresAt > request.time)
+      );
+    }
+
+    function hasPermission(permission) {
+      return isActive()
+        && !(permission in deniedPermissions())
+        && (
+          isAdmin()
+          || permission in rolePermissions(role())
+          || permission in directPermissions()
+          || hasTemporary(permission)
+        );
+    }
+
+    // -----------------------------------------------------------------
+    // Role -> permission matrix (authoritative server-side copy)
+    // -----------------------------------------------------------------
+    // Admin short-circuits in hasPermission(), so its matrix entry never has
+    // to be kept exhaustive for the one role that legitimately sees all.
+
+    function rolePermissions(r) {
+      return r == 'manager' ? managerPermissions()
+        : r == 'cashier' ? cashierPermissions()
+        : r == 'worker' ? workerPermissions()
+        : r == 'shareholder' ? shareholderPermissions()
+        : r == 'auditor' ? auditorPermissions()
+        : [];
+    }
+
+    function managerPermissions() {
+      return [
+        'users.view', 'users.permissions.temporary', 'users.passwords.reset',
+        'staff.view',
+        'customers.view', 'customers.manage',
+        'vehicles.view', 'vehicles.manage',
+        'services.view', 'services.manage',
+        'jobs.view', 'jobs.create', 'jobs.assign', 'jobs.manage', 'jobs.complete',
+        'invoices.view', 'invoices.create', 'invoices.void',
+        'payments.view', 'payments.record',
+        'discounts.apply', 'discounts.approve',
+        'credit.view', 'credit.manage',
+        'loyalty.view', 'loyalty.redeem', 'loyalty.adjust',
+        'finance.view', 'finance.transactions.view', 'finance.transfer', 'finance.deposit', 'finance.reconcile',
+        'cash_handover.submit', 'cash_handover.approve',
+        'expenses.view', 'expenses.create', 'expenses.review', 'expenses.approve', 'expenses.pay',
+        'expenses.cancel', 'expenses.categories.manage', 'expenses.recurring.manage',
+        'inventory.view', 'inventory.manage', 'inventory.suppliers.manage',
+        'inventory.purchase.create', 'inventory.purchase.approve',
+        'inventory.stock.in', 'inventory.stock.out', 'inventory.stock.adjust', 'inventory.reports.view',
+        'attendance.view', 'attendance.view.own', 'attendance.mark', 'attendance.approve',
+        'attendance.record', 'attendance.review', 'attendance.correct',
+        'allowances.view', 'allowances.view.own', 'allowances.approve', 'allowances.calculate',
+        'allowances.pay', 'allowances.adjust',
+        'salary.view',
+        'payroll.view', 'payroll.view.own', 'payroll.prepare', 'payroll.review',
+        'losses.view', 'losses.create', 'losses.review', 'losses.schedule',
+        'after_hours.approve',
+        'reports.operational.view', 'reports.financial.view',
+        'notifications.view'
+      ];
+    }
+
+    function cashierPermissions() {
+      return [
+        'customers.view', 'customers.manage',
+        'vehicles.view', 'vehicles.manage',
+        'services.view',
+        'jobs.view', 'jobs.create',
+        'invoices.view', 'invoices.create',
+        'payments.view', 'payments.record',
+        'credit.view', 'credit.manage',
+        'loyalty.view', 'loyalty.redeem',
+        'expenses.view', 'expenses.create',
+        'cash_handover.submit',
+        'attendance.view.own', 'attendance.mark', 'allowances.view.own', 'payroll.view.own',
+        'reports.operational.view',
+        'notifications.view'
+      ];
+    }
+
+    function workerPermissions() {
+      return [
+        'vehicles.view', 'services.view',
+        'jobs.view.own', 'jobs.complete',
+        'attendance.view.own', 'attendance.mark',
+        'allowances.view.own', 'payroll.view.own',
+        'after_hours.request',
+        'notifications.view'
+      ];
+    }
+
+    function shareholderPermissions() {
+      return [
+        'finance.view',
+        'shareholders.view', 'dividends.view',
+        'reports.operational.view', 'reports.financial.view',
+        'notifications.view'
+      ];
+    }
+
+    // Auditor holds view-only permissions exclusively. There is no write
+    // permission anywhere in this list, which is what makes "auditors must be
+    // read-only" structural rather than merely conventional.
+    function auditorPermissions() {
+      return [
+        'users.view',
+        'staff.view',
+        'customers.view', 'vehicles.view', 'services.view', 'jobs.view',
+        'invoices.view', 'payments.view', 'credit.view', 'loyalty.view',
+        'finance.view', 'finance.transactions.view', 'expenses.view',
+        'inventory.view', 'inventory.reports.view',
+        'attendance.view', 'allowances.view', 'payroll.view',
+        'salary.view', 'salary.history.view', 'losses.view',
+        'shareholders.view', 'dividends.view',
+        'reports.operational.view', 'reports.financial.view',
+        'reports.payroll.view',
+        'audit.view', 'settings.view',
+        'notifications.view'
+      ];
+    }
+
+    // -----------------------------------------------------------------
+    // Write-shape helpers
+    // -----------------------------------------------------------------
+
+    function changedKeys() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+
+    function onlyChanges(allowed) {
+      return changedKeys().hasOnly(allowed);
+    }
+
+    // ===================================================================
+    // users
+    // ===================================================================
+    // The profile that turns a verified phone number into a RamosMAX session.
+    // Creating users and changing role, permissions, temporary grants, active
+    // status, staff link or profile details are administrative actions. They
+    // are performed ONLY by the Cloud Functions in functions/src (Admin SDK),
+    // which authorise the caller server-side and write the audit trail in the
+    // same transaction. No client - not even an admin's - may write them
+    // directly, so a modified app cannot bypass those checks.
+    // A signed-in user may read their own profile and may write back only the
+    // session-bookkeeping fields the bootstrap owns.
+
+    match /users/{uid} {
+      allow get: if isSignedIn() && (
+        request.auth.uid == uid
+        || hasPermission('users.view')
+      );
+
+      allow list: if hasPermission('users.view');
+
+      // Self-service: session bookkeeping only. role, permissions,
+      // deniedPermissions, temporaryPermissions, active and staffId are
+      // explicitly NOT in this set, so a worker cannot promote themselves to
+      // admin, grant themselves a permission, or reactivate a disabled
+      // account. The equality guards are belt-and-braces against a field being
+      // added to the allow-list later without re-reading this comment.
+      // Credential state (mustChangePassword, passwordSet, passwordChangedAt,
+      // passwordResetAt/By) is likewise server-only. No password - plain or
+      // hashed - is ever stored here; Firebase Authentication holds it.
+      allow update: if isSignedIn()
+        && request.auth.uid == uid
+        && onlyChanges(['lastLoginAt', 'fcmTokens', 'updatedAt'])
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.active == resource.data.active
+        && request.resource.data.get('permissions', [])
+             == resource.data.get('permissions', [])
+        && request.resource.data.get('deniedPermissions', [])
+             == resource.data.get('deniedPermissions', [])
+        && request.resource.data.get('temporaryPermissions', {})
+             == resource.data.get('temporaryPermissions', {});
+
+      allow create, delete: if false;
+
+      // History of temporary grants (who, why, when, what became of it). The
+      // enforcement copy is the profile's `temporaryPermissions` map above.
+      match /temporary_grants/{grantId} {
+        allow get, list: if isSignedIn() && (
+          (request.auth.uid == uid && isActive())
+          || hasPermission('users.view')
+        );
+        allow write: if false;
+      }
+    }
+
+    // ===================================================================
+    // staff
+    // ===================================================================
+    // Employment records, keyed by staff ID (e.g. RMX-STF-0001). A staff
+    // member may exist without an app account; `linkedUid` connects the
+    // two. Phase 2 creates and links records through the Cloud Functions
+    // only. Phase 10 (staff management) will add its own narrowly scoped
+    // write rules here.
+
+    match /staff/{staffId} {
+      allow get: if hasPermission('staff.view')
+        || (isActive() && resource.data.linkedUid == request.auth.uid);
+      allow list: if hasPermission('staff.view');
+      allow write: if false;
+    }
+
+    // ===================================================================
+    // Customers, vehicles, service catalogue, service intakes (Phase 3)
+    // ===================================================================
+    // Readable by holders of the matching view permission. NEVER writable by
+    // a client: creation and every change go through the Cloud Functions in
+    // functions/src/operations.js, which enforce unique number plates, valid
+    // customer/service references, whole-shilling prices and the audit trail
+    // in one transaction. Nothing is ever deleted - records become inactive.
+    //
+    // Workers hold vehicles.view (plate look-up) and services.view (the
+    // catalogue with prices) but not customers.view: a vehicle document
+    // carries only the owner name and customer number, never a phone number.
+
+    match /customers/{customerId} {
+      allow get, list: if hasPermission('customers.view');
+      allow write: if false;
+    }
+
+    match /vehicles/{vehicleId} {
+      allow get, list: if hasPermission('vehicles.view');
+      allow write: if false;
+    }
+
+    match /services/{serviceId} {
+      allow get, list: if hasPermission('services.view');
+      allow write: if false;
+    }
+
+    match /service_intakes/{intakeId} {
+      allow get, list: if hasPermission('jobs.view');
+      allow write: if false;
+    }
+
+    // ===================================================================
+    // Worker orders, invoices, payments, receipts, loyalty (Phase 4)
+    // ===================================================================
+    // All read-only to clients. Status changes, totals, balances, numbers,
+    // points and rewards are written only by the Cloud Functions in
+    // functions/src/jobs.js, billing.js and loyalty.js, in transactions that
+    // re-check the caller's permission and write the audit trail. Nothing is
+    // deleted: orders and invoices are cancelled, payments and loyalty
+    // entries are reversed.
+
+    // A worker (jobs.view.own) sees only the orders assigned to them; a list
+    // query must therefore filter on workerId == their uid.
+    match /worker_orders/{orderId} {
+      allow get, list: if hasPermission('jobs.view')
+        || (hasPermission('jobs.view.own') && resource.data.workerId == request.auth.uid);
+      allow write: if false;
+    }
+
+    match /invoices/{invoiceId} {
+      allow get, list: if hasPermission('invoices.view');
+      allow write: if false;
+    }
+
+    match /discounts/{discountId} {
+      allow get, list: if hasPermission('invoices.view');
+      allow write: if false;
+    }
+
+    match /payments/{paymentId} {
+      allow get, list: if hasPermission('payments.view');
+      allow write: if false;
+    }
+
+    match /receipts/{receiptId} {
+      allow get, list: if hasPermission('payments.view') || hasPermission('invoices.view');
+      allow write: if false;
+    }
+
+    match /loyalty_accounts/{vehicleId} {
+      allow get, list: if hasPermission('loyalty.view');
+      allow write: if false;
+    }
+
+    match /loyalty_transactions/{transactionId} {
+      allow get, list: if hasPermission('loyalty.view');
+      allow write: if false;
+    }
+
+    match /loyalty_rewards/{rewardId} {
+      allow get, list: if hasPermission('loyalty.view');
+      allow write: if false;
+    }
+
+    // Hand-off records for future customer messages (SMS/WhatsApp, later).
+    match /loyalty_events/{eventId} {
+      allow get, list: if hasPermission('loyalty.view');
+      allow write: if false;
+    }
+
+    // ===================================================================
+    // Finance, expenses and inventory (Phase 5)
+    // ===================================================================
+    // All read-only to clients. Account balances, ledger entries, expense
+    // statuses (including PAID), stock quantities and stock movements are
+    // written only by the Cloud Functions in functions/src/finance.js,
+    // expenses.js, inventory.js (and billing.js for customer payments), in
+    // transactions that re-check the caller's permission, move the money or
+    // stock together with its ledger entry, and write the audit trail.
+    // Nothing is deleted: transactions and movements are reversed, expenses
+    // and purchases cancelled, accounts, items and suppliers deactivated.
+
+    // Balances (and cash awaiting banking) per account.
+    match /financial_accounts/{accountId} {
+      allow get, list: if hasPermission('finance.view');
+      allow write: if false;
+    }
+
+    // Server-maintained daily totals (income, expenses, transfers...).
+    match /finance_daily_summaries/{day} {
+      allow get, list: if hasPermission('finance.view');
+      allow write: if false;
+    }
+
+    // The immutable ledger.
+    match /financial_transactions/{transactionId} {
+      allow get, list: if hasPermission('finance.transactions.view');
+      allow write: if false;
+    }
+
+    match /bank_deposits/{depositId} {
+      allow get, list: if hasPermission('finance.transactions.view') || hasPermission('finance.deposit');
+      allow write: if false;
+    }
+
+    match /reconciliations/{reconciliationId} {
+      allow get, list: if hasPermission('finance.transactions.view') || hasPermission('finance.reconcile');
+      allow write: if false;
+    }
+
+    match /expenses/{expenseId} {
+      allow get, list: if hasPermission('expenses.view');
+      allow write: if false;
+    }
+
+    match /expense_categories/{categoryId} {
+      allow get, list: if hasPermission('expenses.view');
+      allow write: if false;
+    }
+
+    match /recurring_expenses/{recurringId} {
+      allow get, list: if hasPermission('expenses.view');
+      allow write: if false;
+    }
+
+    match /inventory_items/{itemId} {
+      allow get, list: if hasPermission('inventory.view');
+      allow write: if false;
+    }
+
+    match /suppliers/{supplierId} {
+      allow get, list: if hasPermission('inventory.view');
+      allow write: if false;
+    }
+
+    match /stock_movements/{movementId} {
+      allow get, list: if hasPermission('inventory.view');
+      allow write: if false;
+    }
+
+    match /inventory_purchases/{purchaseId} {
+      allow get, list: if hasPermission('inventory.view');
+      allow write: if false;
+    }
+
+    // ===================================================================
+    // Attendance, allowances, salary, payroll, losses (Phase 6)
+    // ===================================================================
+    // All read-only to clients. Attendance status and verification, allowance
+    // amounts and approvals, salaries, payroll totals, deduction balances and
+    // loss recoveries are written only by the Cloud Functions in
+    // functions/src/attendance.js, allowances.js, payroll.js and losses.js,
+    // which compute every amount themselves and write the audit trail.
+    //
+    // Worker isolation: a record belongs to the staff member whose sign-in
+    // uid is its `staffUid`. The ".own" permissions read ONLY those records,
+    // so a list query must filter on staffUid == their uid (and, for payslips
+    // and loss incidents, on visibleToStaff == true); a query for anyone
+    // else's salary or payroll is refused outright.
+
+    // Rules may evaluate at most 1,000 expressions per request, and every
+    // hasPermission() call rebuilds the role's permission list. So the cheap
+    // ownership test comes first, and two permissions are checked against
+    // ONE copy of the role list (same semantics as hasPermission: granted by
+    // role, directly or temporarily, and not denied).
+    function isOwnRecord() {
+      return resource.data.staffUid == request.auth.uid;
+    }
+
+    function ownWith(permission) {
+      return isOwnRecord() && hasPermission(permission);
+    }
+
+    function hasEitherPermission(a, b) {
+      let denied = deniedPermissions();
+      let roleList = rolePermissions(role());
+      let direct = directPermissions();
+      return isActive() && (
+        (!(a in denied) && (isAdmin() || a in roleList || a in direct || hasTemporary(a)))
+        || (!(b in denied) && (isAdmin() || b in roleList || b in direct || hasTemporary(b))));
+    }
+
+    match /attendance/{attendanceId} {
+      allow get, list: if ownWith('attendance.view.own') || hasPermission('attendance.view');
+      allow write: if false;
+    }
+
+    // Original and corrected values of every correction (append-only).
+    match /attendance_corrections/{correctionId} {
+      allow get, list: if ownWith('attendance.view.own') || hasPermission('attendance.view');
+      allow write: if false;
+    }
+
+    match /worker_allowances/{allowanceId} {
+      allow get, list: if ownWith('allowances.view.own') || hasPermission('allowances.view');
+      allow write: if false;
+    }
+
+    // `staff.salary.view` is the Phase 1 name for salary.view.
+    match /salary_profiles/{staffUid} {
+      allow get, list: if ownWith('payroll.view.own') || hasEitherPermission('salary.view', 'staff.salary.view');
+      allow write: if false;
+    }
+
+    match /salary_history/{historyId} {
+      allow get, list: if ownWith('payroll.view.own') || hasPermission('salary.history.view');
+      allow write: if false;
+    }
+
+    // Payroll headers carry totals only. reports.payroll.view (not granted
+    // to any role by default) gives management-level totals without any
+    // individual's pay.
+    match /payroll/{payrollId} {
+      allow get, list: if hasEitherPermission('payroll.view', 'reports.payroll.view');
+      allow write: if false;
+    }
+
+    // One employee's pay. The employee sees their own payslip once the
+    // payroll has been paid (visibleToStaff).
+    match /payroll_items/{itemId} {
+      allow get, list: if (resource.data.visibleToStaff == true && ownWith('payroll.view.own'))
+        || hasPermission('payroll.view');
+      allow write: if false;
+    }
+
+    match /salary_deductions/{deductionId} {
+      allow get, list: if ownWith('payroll.view.own')
+        || hasEitherPermission('payroll.view', 'losses.view') || hasPermission('deductions.manage');
+      allow write: if false;
+    }
+
+    // A staff member sees an incident about them once it has been decided.
+    match /loss_incidents/{incidentId} {
+      allow get, list: if (resource.data.visibleToStaff == true && ownWith('payroll.view.own'))
+        || hasPermission('losses.view');
+      allow write: if false;
+    }
+
+    // ===================================================================
+    // audit_logs
+    // ===================================================================
+    // Append-only. Entries may be created by any active user (so every module
+    // can record its own actions), but never edited or removed by anyone -
+    // including admins. Amendments are new entries, not rewrites.
+
+    match /audit_logs/{logId} {
+      allow get, list: if hasPermission('audit.view');
+
+      allow create: if isActive()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.userRole == role()
+        && request.resource.data.timestamp == request.time
+        && request.resource.data.action is string
+        && request.resource.data.module is string;
+
+      allow update, delete: if false;
+    }
+
+    // ===================================================================
+    // notifications
+    // ===================================================================
+    // Delivered to a specific recipient. The client may mark its own
+    // notification read; it may never author one (that is server side).
+
+    match /notifications/{notificationId} {
+      allow get, list: if isActive()
+        && resource.data.recipientId == request.auth.uid;
+
+      allow update: if isActive()
+        && resource.data.recipientId == request.auth.uid
+        && onlyChanges(['read', 'readAt', 'updatedAt']);
+
+      allow create, delete: if false;
+    }
+
+    // ===================================================================
+    // settings
+    // ===================================================================
+    // Read-only reference data (tax rates, loyalty thresholds; Phase 6:
+    // settings/payroll_policy - reporting time, grace period, daily allowance
+    // and payroll rules, no individual's pay; Phase 5: settings/payment_accounts - the active bank accounts
+    // a cashier may pick for a bank payment, names and masked numbers only,
+    // no balances). Mutated only by trusted server-side code.
+
+    match /settings/{settingId} {
+      allow get, list: if isActive();
+      allow write: if false;
+    }
+
+    // ===================================================================
+    // Default deny
+    // ===================================================================
+    // Every collection in the architecture that is not matched above -
+    // counters (server-side sequence allocation), unique_keys (number-plate,
+    // customer-phone and service-name reservations), login_throttle (sign-in
+    // attempt limits, keyed by a hash of the phone number), staff_documents, service_jobs,
+    // job_items, bank_accounts, mobile_money_accounts (Phase 5 keeps every
+    // account in financial_accounts), cash_handovers, inventory,
+    // after_hours_access, after_hours_sessions, shareholders,
+    // shares, dividends - is denied outright until the phase that owns it
+    // ships its rules alongside its code.
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
