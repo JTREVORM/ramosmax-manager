@@ -65,7 +65,7 @@ jobs:
 
       # Applies every migration to a fresh database, then runs the schema,
       # RLS, permission-parity and authentication suites against it.
-      - name: Database, RLS and permission parity
+      - name: Database, RLS, permission parity and business rules
         run: |
           npm run db:reset
           npm run test:db

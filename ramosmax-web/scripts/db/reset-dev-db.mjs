@@ -51,6 +51,7 @@ const files = [
     .sort()
     .map((f) => join(root, 'supabase/migrations', f)),
   join(root, 'supabase/seed/dev_accounts.sql'),
+  join(root, 'supabase/seed/dev_operations.sql'),
 ];
 
 await run(devUrl, async (client) => {

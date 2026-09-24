@@ -38,14 +38,14 @@ export async function closePool() {
   pool = null;
 }
 
-export interface QueryResultLike {
-  rows: Record<string, unknown>[];
+export interface QueryResultLike<T = Record<string, unknown>> {
+  rows: T[];
   rowCount: number | null;
 }
 
 /** A client session, scoped to one rolled-back transaction. */
 export interface Session {
-  query(sql: string, params?: unknown[]): Promise<QueryResultLike>;
+  query<T = Record<string, unknown>>(sql: string, params?: unknown[]): Promise<QueryResultLike<T>>;
   /** Runs a statement and returns the error message, or null when it succeeded. */
   expectError(sql: string, params?: unknown[]): Promise<string | null>;
   /** True when the statement was rejected for any reason. */

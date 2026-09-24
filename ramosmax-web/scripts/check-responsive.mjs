@@ -126,6 +126,47 @@ async function checkShell(page, viewport) {
   check((await pageOverflow(page)) <= 0, 'shell has no horizontal scroll');
 }
 
+/**
+ * The Phase C screens at every breakpoint. The checks that matter on a phone:
+ * no horizontal scroll, and the data-dense screens rendering as CARDS rather
+ * than a table that must be scrolled sideways.
+ */
+async function checkOperations(page, viewport) {
+  const screens = [
+    ['/customers', 'Customers'],
+    ['/vehicles', 'Vehicles'],
+    ['/services', 'Services'],
+    ['/jobs', 'Jobs'],
+    ['/new-service', 'New service'],
+  ];
+
+  for (const [path, title] of screens) {
+    await page.goto(`${BASE}${path}`, { waitUntil: 'domcontentloaded' });
+    const heading = await page.getByRole('heading', { level: 1 }).first().textContent();
+    check(heading.trim() === title, `${path} renders`);
+    check((await pageOverflow(page)) <= 0, `${path} has no horizontal scroll`);
+    await page.screenshot({ path: `${OUT}/ops-${viewport.name}-${path.slice(1)}.png` });
+  }
+
+  // The table/card switch: a table on a wide screen, cards on a phone.
+  await page.goto(`${BASE}/customers`, { waitUntil: 'domcontentloaded' });
+  const table = page.getByRole('table').first();
+  const list = page.getByRole('list', { name: 'Customers' }).first();
+  if (viewport.width >= 768) {
+    check(await table.isVisible(), 'customers render as a table on a wide screen');
+    check(!(await list.isVisible()), 'the card list is hidden on a wide screen');
+  } else {
+    check(await list.isVisible(), 'customers render as cards on a phone');
+    check(!(await table.isVisible()), 'the table is hidden on a phone');
+  }
+
+  // Touch targets on the busiest form.
+  await page.goto(`${BASE}/customers/new`, { waitUntil: 'domcontentloaded' });
+  const submit = await page.getByRole('button', { name: 'Add customer' }).boundingBox();
+  check(submit !== null && submit.height >= 44, 'the form submit meets the 44px touch target');
+  check((await pageOverflow(page)) <= 0, 'the customer form has no horizontal scroll');
+}
+
 async function checkDarkMode(browser) {
   const context = await browser.newContext({
     viewport: { width: 390, height: 844 },
@@ -161,6 +202,7 @@ async function main() {
 
     await checkSignIn(page, viewport);
     await checkShell(page, viewport);
+    await checkOperations(page, viewport);
 
     await context.close();
   }

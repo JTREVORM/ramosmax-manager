@@ -57,6 +57,63 @@ export async function localPool(): Promise<PgPool> {
 /* -------------------------------------------------------------------------- */
 
 /**
+ * Runs a read AS THE SIGNED-IN USER, so RLS applies to server-rendered pages
+ * exactly as it would to a direct client query.
+ *
+ * This matters more than it looks. The local development pool connects as a
+ * SUPERUSER, and a superuser bypasses row-level security entirely — even with
+ * FORCE ROW LEVEL SECURITY set. Reading through that connection would quietly
+ * show every row to every role. So each request opens a transaction, takes the
+ * `authenticated` role and sets the same `request.jwt.claims` PostgREST would,
+ * which is precisely how the RLS tests run.
+ */
+export async function queryAsUser<T = Record<string, unknown>>(
+  userId: string,
+  sql: string,
+  params: unknown[] = [],
+): Promise<T[]> {
+  if (backend() === 'supabase') {
+    throw new Error('Use the Supabase client for user-scoped reads.');
+  }
+  const pooled = (await localPool()) as unknown as {
+    connect(): Promise<{
+      query(text: string, values?: unknown[]): Promise<{ rows: unknown[] }>;
+      release(): void;
+    }>;
+  };
+  const client = await pooled.connect();
+  try {
+    await client.query('begin');
+    await client.query(
+      `set local request.jwt.claims = '${JSON.stringify({ sub: userId, role: 'authenticated' })}'`,
+    );
+    await client.query('set local role authenticated');
+    const { rows } = await client.query(sql, params as never);
+    await client.query('commit');
+    return rows as T[];
+  } catch (e) {
+    await client.query('rollback').catch(() => {});
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Calls a SECURITY DEFINER function AS THE SIGNED-IN USER, so the function's
+ * own permission checks see the real caller. This is how every Phase C
+ * mutation reaches the database.
+ */
+export async function rpcAsUser<T = Record<string, unknown>>(
+  userId: string,
+  fn: string,
+  params: unknown[] = [],
+): Promise<T[]> {
+  const placeholders = params.map((_, i) => `$${i + 1}`).join(', ');
+  return queryAsUser<T>(userId, `select * from app.${fn}(${placeholders})`, params);
+}
+
+/**
  * A database handle with SERVICE-LEVEL privileges. Use it only in server code
  * that has already decided the caller is allowed to act — the SECURITY DEFINER
  * functions still re-check permissions themselves.

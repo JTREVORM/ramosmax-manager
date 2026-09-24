@@ -40,7 +40,27 @@ development database):
 npm run build && npx next start -p 3100 &
 CHROMIUM_PATH=/path/to/chromium node scripts/check-responsive.mjs
 CHROMIUM_PATH=/path/to/chromium node scripts/check-auth-e2e.mjs
+
+# Needs a FRESH database, because RamosMAX never deletes what it creates:
+npm run db:reset
+CHROMIUM_PATH=/path/to/chromium node scripts/check-operations-e2e.mjs
 ```
+
+## The worker / customer-phone boundary
+
+A Worker holds `vehicles.view` and `services.view` but not `customers.view`.
+They must be able to look up a number plate and see whose car it is, and must
+never reach that customer's phone number. Three independent layers hold that
+line:
+
+1. **`public.vehicles` has no phone column at all** — there is nothing to leak.
+2. **`public.customers`, which does hold phones, grants a Worker no row.**
+3. **`public.vehicle_directory`** — the view plate search reads — names an
+   explicit column list, so a column added to `vehicles` later cannot widen it
+   by accident.
+
+`src/test/db/operations-rls.test.ts` proves all three, including direct
+attempts to join or name a customer id.
 
 ## Architecture rules
 
@@ -79,8 +99,13 @@ supabase/migrations/
   0003_access_helpers.sql             is_active(), has_permission(), RLS
   0004_auth_functions.sql             throttle, password policy, sign-in decision
   0005_user_admin.sql                 roles, permissions, temporary grants
+  0006_operations_schema.sql          customers, vehicles, services, jobs, orders
+  0007_operations_functions.sql       plates, customer/vehicle/service rules
+  0008_jobs_functions.sql             intake, assignment, the status machine
+  0009_operations_rls.sql             RLS, the vehicle directory, plate search
 supabase/seed/
   dev_accounts.sql                    DEVELOPMENT ONLY: six fake test accounts
+  dev_operations.sql                  DEVELOPMENT ONLY: catalogue and test vehicles
 src/
   app/(auth)/login                    sign-in
   app/(app)                           authenticated shell

@@ -1,4 +1,5 @@
 import * as React from 'react';
+import Link from 'next/link';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 
@@ -34,3 +35,15 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ),
 );
 Button.displayName = 'Button';
+
+/**
+ * A link that looks like a button. Kept separate from Button rather than using
+ * an `asChild` slot: navigation is an anchor and should stay one, so it keeps
+ * middle-click, "open in new tab" and prefetching.
+ */
+export interface LinkButtonProps
+  extends React.ComponentProps<typeof Link>, VariantProps<typeof button> {}
+
+export function LinkButton({ className, variant, size, block, ...props }: LinkButtonProps) {
+  return <Link className={cn(button({ variant, size, block }), className)} {...props} />;
+}

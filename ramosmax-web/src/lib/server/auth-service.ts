@@ -290,3 +290,16 @@ export async function currentUser(): Promise<CurrentUser | null> {
     permissions: (rows[0].permissions as string[]) ?? [],
   };
 }
+
+/**
+ * The signed-in user's effective permissions as a set, for page guards.
+ *
+ * A guard decides which SCREEN to show. It is not what protects the data —
+ * RLS returns nothing to someone who may not read it either way — but showing
+ * an empty list to a person who has no business on that screen is confusing,
+ * and the reference implementation shows them a clear message instead.
+ */
+export async function currentPermissions(): Promise<Set<string>> {
+  const user = await currentUser();
+  return new Set(user?.permissions ?? []);
+}
