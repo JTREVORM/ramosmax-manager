@@ -1,0 +1,163 @@
+#!/usr/bin/env node
+/**
+ * Phase A exit criterion: the sign-in page renders and is responsive at all
+ * four breakpoints, and the authenticated shell shows the right navigation
+ * presentation for each.
+ *
+ * Checks that actually matter on a phone:
+ *   - no horizontal page scroll (the classic mobile failure);
+ *   - the primary action is reachable without scrolling;
+ *   - touch targets are at least 44px;
+ *   - the right navigation presentation is visible per breakpoint;
+ *   - every destination stays reachable from the drawer on a small screen.
+ *
+ * Usage: build and start the app on port 3100, then
+ *   CHROMIUM_PATH=/path/to/chromium node scripts/check-responsive.mjs
+ */
+import { chromium } from 'playwright';
+import { mkdirSync } from 'node:fs';
+
+const BASE = process.env.BASE_URL ?? 'http://127.0.0.1:3100';
+const OUT = process.env.SHOT_DIR ?? '.responsive';
+
+const VIEWPORTS = [
+  { name: 'phone', width: 390, height: 844, label: 'base  <640px' },
+  { name: 'tablet', width: 820, height: 1180, label: 'sm/md 640-1024px' },
+  { name: 'laptop', width: 1280, height: 800, label: 'lg    1024-1440px' },
+  { name: 'desktop', width: 1600, height: 900, label: 'xl    >1440px' },
+];
+
+let failures = 0;
+
+function check(passed, message) {
+  if (passed) {
+    console.log(`    ok    ${message}`);
+  } else {
+    failures += 1;
+    console.error(`    FAIL  ${message}`);
+  }
+}
+
+const pageOverflow = (page) =>
+  page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+
+async function checkSignIn(page, viewport) {
+  await page.goto(`${BASE}/login`, { waitUntil: 'domcontentloaded' });
+  await page.screenshot({ path: `${OUT}/login-${viewport.name}.png`, fullPage: true });
+
+  check(await page.getByRole('heading', { name: 'RamosMAX' }).isVisible(), 'sign-in page renders');
+
+  const controls = [
+    ['phone number field', page.getByLabel('Phone number')],
+    ['password field', page.getByLabel('Password', { exact: true })],
+    ['sign-in button', page.getByRole('button', { name: 'Sign in' })],
+  ];
+  for (const [label, locator] of controls) {
+    check(await locator.isVisible(), `${label} visible`);
+  }
+
+  check((await pageOverflow(page)) <= 0, 'no horizontal scroll');
+
+  const submit = await page.getByRole('button', { name: 'Sign in' }).boundingBox();
+  const height = submit ? Math.round(submit.height) : 0;
+  check(height >= 44, `submit button is ${height}px tall (>=44)`);
+
+  // Nobody should have to scroll to sign in.
+  check(
+    Boolean(submit) && submit.y + submit.height <= viewport.height,
+    'sign-in button is above the fold',
+  );
+
+  // Validation works before any server exists.
+  await page.getByLabel('Phone number').fill('0552123456');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  check(await page.locator('#phone-error').isVisible(), 'rejects an invalid phone number');
+
+  await page.getByLabel('Phone number').fill('0772 123 456');
+  await page.getByLabel('Password', { exact: true }).fill('Str0ng!Pass');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  check(await page.getByRole('status').isVisible(), 'accepts a valid Ugandan phone number');
+}
+
+async function checkShell(page, viewport) {
+  await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
+  await page.screenshot({ path: `${OUT}/shell-${viewport.name}.png` });
+
+  const sidebar = page.getByRole('navigation', { name: 'Main' });
+  const bottomBar = page.getByRole('navigation', { name: 'Primary' });
+  const menuButton = page.getByRole('button', { name: 'Open menu' });
+
+  if (viewport.width >= 1024) {
+    check(await sidebar.isVisible(), 'desktop sidebar visible');
+    check(!(await bottomBar.isVisible()), 'bottom bar hidden on desktop');
+    check(!(await menuButton.isVisible()), 'hamburger hidden on desktop');
+  } else {
+    check(!(await sidebar.isVisible()), 'desktop sidebar hidden on small screen');
+    check(await bottomBar.isVisible(), 'bottom bar visible');
+    check(await menuButton.isVisible(), 'menu button visible');
+
+    await menuButton.click();
+    const drawer = page.getByRole('dialog', { name: 'Navigation' });
+    check(await drawer.isVisible(), 'drawer opens');
+
+    const destinations = await drawer.getByRole('link').count();
+    check(destinations >= 20, `drawer exposes ${destinations} destinations`);
+
+    await page.keyboard.press('Escape');
+    check(!(await drawer.isVisible()), 'Escape closes the drawer');
+  }
+
+  check((await pageOverflow(page)) <= 0, 'shell has no horizontal scroll');
+}
+
+async function checkDarkMode(browser) {
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    colorScheme: 'dark',
+  });
+  const page = await context.newPage();
+  await page.goto(`${BASE}/login`, { waitUntil: 'domcontentloaded' });
+  await page.screenshot({ path: `${OUT}/login-phone-dark.png`, fullPage: true });
+
+  const background = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  console.log(`\n  dark mode: body background ${background}`);
+  check(background === 'rgb(18, 16, 22)', 'dark tokens applied');
+
+  await context.close();
+}
+
+async function main() {
+  mkdirSync(OUT, { recursive: true });
+
+  const browser = await chromium.launch({
+    // The sandbox ships a pinned Chromium; use it rather than downloading one.
+    executablePath: process.env.CHROMIUM_PATH ?? undefined,
+  });
+
+  for (const viewport of VIEWPORTS) {
+    console.log(`\n  ${viewport.name} (${viewport.width}x${viewport.height})  ${viewport.label}`);
+    const context = await browser.newContext({
+      viewport: { width: viewport.width, height: viewport.height },
+      deviceScaleFactor: 1,
+      hasTouch: viewport.width < 1024,
+    });
+    const page = await context.newPage();
+
+    await checkSignIn(page, viewport);
+    await checkShell(page, viewport);
+
+    await context.close();
+  }
+
+  await checkDarkMode(browser);
+  await browser.close();
+
+  console.log(
+    failures === 0
+      ? '\nAll responsive checks passed.'
+      : `\n${failures} responsive check(s) failed.`,
+  );
+  process.exit(failures === 0 ? 0 : 1);
+}
+
+await main();

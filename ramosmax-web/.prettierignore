@@ -1,0 +1,5 @@
+.next
+node_modules
+public/icons
+src/lib/permissions/catalogue.generated.ts
+supabase/migrations/0002_permission_catalogue.sql

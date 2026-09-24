@@ -1,0 +1,187 @@
+@import 'tailwindcss';
+
+/* ==========================================================================
+   RamosMAX design tokens
+   --------------------------------------------------------------------------
+   Brand colours are sampled from the official logo and match
+   lib/core/branding/brand.dart exactly (purple #362060, deep #24133F,
+   gold #D0AD47, deep gold #A8872B). Never hard-code a brand colour elsewhere.
+
+   Every colour is defined as a token on :root and redefined for dark mode, so
+   a component never needs to know which theme it is in. Dark mode matters
+   operationally here: staff use this outdoors, and glare is a real problem.
+   ========================================================================== */
+
+:root {
+  --brand-purple: #362060;
+  --brand-purple-deep: #24133f;
+  --brand-gold: #d0ad47;
+  --brand-gold-deep: #a8872b;
+
+  --background: #f7f7f9;
+  --surface: #ffffff;
+  --surface-muted: #f1f1f4;
+  --border: #e3e3e8;
+  --foreground: #16141c;
+  --muted-foreground: #5e5a6b;
+
+  --primary: var(--brand-purple);
+  --primary-foreground: #ffffff;
+  --accent: var(--brand-gold);
+  --accent-foreground: #24133f;
+
+  /* Status colours. Money states must stay legible at AA on both themes. */
+  --success: #17683a;
+  --success-bg: #e3f4ea;
+  --warning: #8a5a00;
+  --warning-bg: #fdf0d9;
+  --danger: #a3161a;
+  --danger-bg: #fbe6e7;
+  --info: #1d4f8a;
+  --info-bg: #e5eefa;
+
+  --ring: color-mix(in srgb, var(--brand-purple) 45%, transparent);
+  --radius: 0.625rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --background: #121016;
+    --surface: #1b1822;
+    --surface-muted: #241f2e;
+    --border: #322c3d;
+    --foreground: #f2f0f5;
+    --muted-foreground: #a39fae;
+
+    --primary: #8f6fd4;
+    --primary-foreground: #14101c;
+    --accent: var(--brand-gold);
+    --accent-foreground: #1b1822;
+
+    --success: #6ddc9b;
+    --success-bg: #12301f;
+    --warning: #f0c064;
+    --warning-bg: #332612;
+    --danger: #ff8d92;
+    --danger-bg: #3a1618;
+    --info: #8ebdf5;
+    --info-bg: #14263d;
+
+    --ring: color-mix(in srgb, #8f6fd4 55%, transparent);
+  }
+}
+
+:root[data-theme='dark'] {
+  --background: #121016;
+  --surface: #1b1822;
+  --surface-muted: #241f2e;
+  --border: #322c3d;
+  --foreground: #f2f0f5;
+  --muted-foreground: #a39fae;
+
+  --primary: #8f6fd4;
+  --primary-foreground: #14101c;
+  --accent: var(--brand-gold);
+  --accent-foreground: #1b1822;
+
+  --success: #6ddc9b;
+  --success-bg: #12301f;
+  --warning: #f0c064;
+  --warning-bg: #332612;
+  --danger: #ff8d92;
+  --danger-bg: #3a1618;
+  --info: #8ebdf5;
+  --info-bg: #14263d;
+
+  --ring: color-mix(in srgb, #8f6fd4 55%, transparent);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-border: var(--border);
+  --color-foreground: var(--foreground);
+  --color-muted-foreground: var(--muted-foreground);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
+  --color-brand-purple: var(--brand-purple);
+  --color-brand-purple-deep: var(--brand-purple-deep);
+  --color-brand-gold: var(--brand-gold);
+  --color-brand-gold-deep: var(--brand-gold-deep);
+
+  --color-success: var(--success);
+  --color-success-bg: var(--success-bg);
+  --color-warning: var(--warning);
+  --color-warning-bg: var(--warning-bg);
+  --color-danger: var(--danger);
+  --color-danger-bg: var(--danger-bg);
+  --color-info: var(--info);
+  --color-info-bg: var(--info-bg);
+
+  --radius-DEFAULT: var(--radius);
+
+  /* Breakpoints match docs: phone-first, then tablet, laptop, desktop. */
+  --breakpoint-sm: 40rem;
+  --breakpoint-md: 48rem;
+  --breakpoint-lg: 64rem;
+  --breakpoint-xl: 90rem;
+}
+
+* {
+  border-color: var(--border);
+}
+
+html {
+  /* Stops iOS Safari inflating text in landscape on the forecourt. */
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family:
+    var(--font-sans),
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    sans-serif;
+  /* Safe areas for an installed PWA with a home indicator. */
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Minimum 44x44px touch targets, per the responsive UI architecture. */
+@media (pointer: coarse) {
+  button,
+  [role='button'],
+  a[data-nav],
+  input[type='submit'] {
+    min-height: 44px;
+  }
+}
+
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Money and reference numbers line up in tables when tabular. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}

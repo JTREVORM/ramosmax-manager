@@ -1,0 +1,47 @@
+name: RamosMAX Web CI
+
+# Phase A onward. The Flutter reference implementation is NOT touched by this
+# workflow: it remains the reference until the web system reaches verified
+# feature parity.
+on:
+  push:
+    branches: ['**']
+    paths: ['ramosmax-web/**', '.github/workflows/web-ci.yml']
+  pull_request:
+    paths: ['ramosmax-web/**', '.github/workflows/web-ci.yml']
+
+defaults:
+  run:
+    working-directory: ramosmax-web
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ramosmax-web/package-lock.json
+
+      - run: npm ci
+
+      # The permission catalogue is GENERATED from the Phase 9 reference
+      # implementation. If regenerating changes anything, the committed copy
+      # has drifted from the reference and the build must fail — this is the
+      # web replacement for the Dart/rules/catalogue three-way drift test.
+      - name: Permission catalogue is in sync with the reference
+        run: |
+          npm run gen:permissions
+          git diff --exit-code -- src/lib/permissions/catalogue.generated.ts \
+                                  supabase/migrations/0002_permission_catalogue.sql
+
+      - name: Migrations parse against the PostgreSQL grammar
+        run: npm run check:sql
+
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test
+      - run: npm run build
