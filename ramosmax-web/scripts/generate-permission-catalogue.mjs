@@ -168,6 +168,16 @@ const sql = `-- AUTO-GENERATED — DO NOT EDIT BY HAND.
 begin;
 
 -- ---------------------------------------------------------------------------
+-- Permission groups (display order follows the Flutter PermissionGroup enum)
+-- ---------------------------------------------------------------------------
+-- Groups are seeded FIRST: app.permissions.group_id references them.
+
+insert into app.permission_groups (id, label, sort_order) values
+${groups.map((g, i) => `  (${sq(g.id)}, ${sq(g.label)}, ${i + 1})`).join(',\n')}
+on conflict (id) do update
+  set label = excluded.label, sort_order = excluded.sort_order;
+
+-- ---------------------------------------------------------------------------
 -- Permission catalogue
 -- ---------------------------------------------------------------------------
 
@@ -183,15 +193,6 @@ on conflict (key) do update
       group_id              = excluded.group_id,
       is_admin_only         = excluded.is_admin_only,
       is_authorization_only = excluded.is_authorization_only;
-
--- ---------------------------------------------------------------------------
--- Permission groups (display order follows the Flutter PermissionGroup enum)
--- ---------------------------------------------------------------------------
-
-insert into app.permission_groups (id, label, sort_order) values
-${groups.map((g, i) => `  (${sq(g.id)}, ${sq(g.label)}, ${i + 1})`).join(',\n')}
-on conflict (id) do update
-  set label = excluded.label, sort_order = excluded.sort_order;
 
 -- ---------------------------------------------------------------------------
 -- Roles and ranks

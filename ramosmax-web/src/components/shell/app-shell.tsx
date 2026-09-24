@@ -3,11 +3,12 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Menu, X, LogOut } from 'lucide-react';
+import { Menu, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { primaryItems, visibleSections, type NavItem } from '@/lib/navigation/nav-config';
 import { NavIcon } from './nav-icon';
 import { OfflineBanner } from './offline-banner';
+import { SignOutButton } from './sign-out-button';
 
 /**
  * AppShell — one navigation config, three presentations.
@@ -251,13 +252,7 @@ function UserCard({ user }: { user: ShellUser }) {
             {user.staffId ? ` · ${user.staffId}` : ''}
           </div>
         </div>
-        <Link
-          href="/profile"
-          aria-label="Profile and sign out"
-          className="hover:bg-surface-muted flex size-9 shrink-0 items-center justify-center rounded-[var(--radius)]"
-        >
-          <LogOut className="size-4" aria-hidden="true" />
-        </Link>
+        <SignOutButton compact />
       </div>
     </div>
   );

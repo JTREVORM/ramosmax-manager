@@ -17,6 +17,24 @@ defaults:
 jobs:
   verify:
     runs-on: ubuntu-latest
+
+    # The database suite runs against a real PostgreSQL server, not a mock:
+    # RLS, privileges and SECURITY DEFINER behaviour cannot be verified any
+    # other way.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: devonly
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 10s
+          --health-timeout 5s --health-retries 5
+
+    env:
+      DATABASE_ADMIN_URL: postgres://postgres:devonly@127.0.0.1:5432/postgres
+      DATABASE_URL: postgres://postgres:devonly@127.0.0.1:5432/ramosmax_dev
+
     steps:
       - uses: actions/checkout@v4
 
@@ -44,4 +62,12 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run test
+
+      # Applies every migration to a fresh database, then runs the schema,
+      # RLS, permission-parity and authentication suites against it.
+      - name: Database, RLS and permission parity
+        run: |
+          npm run db:reset
+          npm run test:db
+
       - run: npm run build

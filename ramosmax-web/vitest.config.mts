@@ -10,5 +10,9 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],
+    // Database tests need a live PostgreSQL development database and run
+    // under vitest.db.config.mts (npm run test:db). Keeping them out means
+    // `npm test` stays fast and needs no services.
+    exclude: ['src/test/db/**'],
   },
 });

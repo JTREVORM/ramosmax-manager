@@ -73,14 +73,30 @@ async function checkSignIn(page, viewport) {
   await page.getByRole('button', { name: 'Sign in' }).click();
   check(await page.locator('#phone-error').isVisible(), 'rejects an invalid phone number');
 
+  // A well-formed but unknown number must clear the client-side error and be
+  // answered by the SERVER with the generic credential message.
   await page.getByLabel('Phone number').fill('0772 123 456');
   await page.getByLabel('Password', { exact: true }).fill('Str0ng!Pass');
   await page.getByRole('button', { name: 'Sign in' }).click();
-  check(await page.getByRole('status').isVisible(), 'accepts a valid Ugandan phone number');
+  await page.waitForSelector('#sign-in-error', { timeout: 15_000 });
+  check(!(await page.locator('#phone-error').isVisible()), 'accepts a valid Ugandan phone number');
+}
+
+/**
+ * The shell is behind authentication, so sign in with the development
+ * administrator first. That also means these checks exercise the real
+ * permission-driven navigation rather than a placeholder.
+ */
+async function signIn(page) {
+  await page.goto(`${BASE}/login`, { waitUntil: 'domcontentloaded' });
+  await page.getByLabel('Phone number').fill('0772000001');
+  await page.getByLabel('Password', { exact: true }).fill('DevP@ssw0rd!');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.waitForURL(`${BASE}/`, { timeout: 15_000 });
 }
 
 async function checkShell(page, viewport) {
-  await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
+  await signIn(page);
   await page.screenshot({ path: `${OUT}/shell-${viewport.name}.png` });
 
   const sidebar = page.getByRole('navigation', { name: 'Main' });

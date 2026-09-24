@@ -14,7 +14,10 @@
     "check:sql": "node scripts/check-sql.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "verify": "npm run gen:permissions && npm run check:sql && npm run lint && npm run typecheck && npm run test"
+    "verify": "npm run gen:permissions && npm run check:sql && npm run lint && npm run typecheck && npm run test",
+    "db:reset": "node scripts/db/reset-dev-db.mjs",
+    "test:db": "vitest run --config vitest.db.config.mts",
+    "verify:all": "npm run verify && npm run db:reset && npm run test:db"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",
@@ -30,6 +33,7 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-hook-form": "^7.88.0",
+    "server-only": "^0.0.1",
     "tailwind-merge": "^3.7.0",
     "zod": "^4.6.5"
   },
@@ -40,6 +44,7 @@
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.7",
     "@types/node": "^22.20.4",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^6.1.1",
@@ -47,6 +52,7 @@
     "eslint-config-next": "16.3.6",
     "jsdom": "^30.1.1",
     "libpg-query": "^18.1.5",
+    "pg": "^8.23.0",
     "playwright": "^1.63.0",
     "prettier": "^3.9.9",
     "prettier-plugin-tailwindcss": "^0.8.1",

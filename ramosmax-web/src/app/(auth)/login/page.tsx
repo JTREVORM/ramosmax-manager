@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import { LoginForm } from './login-form';
 
@@ -13,7 +14,11 @@ export default function LoginPage() {
         <h1 className="text-foreground text-xl font-semibold">RamosMAX</h1>
         <p className="text-muted-foreground mt-1 text-sm">Management System</p>
       </div>
-      <LoginForm />
+      {/* LoginForm reads ?next= to return the person where they were heading,
+          so it must sit behind a Suspense boundary to stay prerenderable. */}
+      <Suspense fallback={<div className="h-64" aria-hidden="true" />}>
+        <LoginForm />
+      </Suspense>
     </div>
   );
 }

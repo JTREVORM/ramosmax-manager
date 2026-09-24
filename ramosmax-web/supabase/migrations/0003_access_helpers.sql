@@ -386,14 +386,29 @@ create policy users_self_update on public.users
   using (id = auth.uid())
   with check (id = auth.uid());
 
+-- True when the statement is running as a CLIENT (PostgREST sets the request
+-- role to `authenticated` or `anon`), rather than inside a SECURITY DEFINER
+-- function, which runs as the function owner.
+--
+-- Do NOT write this as `current_user = session_user`: PostgREST connects as
+-- `authenticator` and then SET ROLE's, so those two never match for a real
+-- client and the guard would silently never fire.
+create or replace function app.is_client_session()
+returns boolean
+language sql
+stable
+as $$
+  select current_user in ('authenticated', 'anon');
+$$;
+
 create or replace function app.guard_users_self_update()
 returns trigger
 language plpgsql
 as $$
 begin
-  -- SECURITY DEFINER functions run as the table owner and bypass this guard;
-  -- only a direct client UPDATE reaches it as a non-owner.
-  if current_user = session_user and auth.uid() = new.id then
+  -- SECURITY DEFINER functions run as the function owner and bypass this
+  -- guard; only a direct client UPDATE reaches it as a client role.
+  if app.is_client_session() then
     if new.role                 is distinct from old.role
     or new.active               is distinct from old.active
     or new.permissions          is distinct from old.permissions

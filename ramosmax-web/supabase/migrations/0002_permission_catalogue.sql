@@ -13,6 +13,29 @@
 begin;
 
 -- ---------------------------------------------------------------------------
+-- Permission groups (display order follows the Flutter PermissionGroup enum)
+-- ---------------------------------------------------------------------------
+-- Groups are seeded FIRST: app.permissions.group_id references them.
+
+insert into app.permission_groups (id, label, sort_order) values
+  ('users', 'Users', 1),
+  ('staff', 'Staff', 2),
+  ('customers', 'Customers & vehicles', 3),
+  ('operations', 'Services & jobs', 4),
+  ('sales', 'Invoices, payments & discounts', 5),
+  ('loyalty', 'Loyalty', 6),
+  ('finance', 'Finance', 7),
+  ('expenses', 'Expenses', 8),
+  ('inventory', 'Inventory', 9),
+  ('attendance', 'Attendance & allowances', 10),
+  ('payroll', 'Salary, payroll & losses', 11),
+  ('shareholders', 'Shareholders, shares & dividends', 12),
+  ('reports', 'Reports', 13),
+  ('system', 'Audit, notifications & settings', 14)
+on conflict (id) do update
+  set label = excluded.label, sort_order = excluded.sort_order;
+
+-- ---------------------------------------------------------------------------
 -- Permission catalogue
 -- ---------------------------------------------------------------------------
 
@@ -149,28 +172,6 @@ on conflict (key) do update
       group_id              = excluded.group_id,
       is_admin_only         = excluded.is_admin_only,
       is_authorization_only = excluded.is_authorization_only;
-
--- ---------------------------------------------------------------------------
--- Permission groups (display order follows the Flutter PermissionGroup enum)
--- ---------------------------------------------------------------------------
-
-insert into app.permission_groups (id, label, sort_order) values
-  ('users', 'Users', 1),
-  ('staff', 'Staff', 2),
-  ('customers', 'Customers & vehicles', 3),
-  ('operations', 'Services & jobs', 4),
-  ('sales', 'Invoices, payments & discounts', 5),
-  ('loyalty', 'Loyalty', 6),
-  ('finance', 'Finance', 7),
-  ('expenses', 'Expenses', 8),
-  ('inventory', 'Inventory', 9),
-  ('attendance', 'Attendance & allowances', 10),
-  ('payroll', 'Salary, payroll & losses', 11),
-  ('shareholders', 'Shareholders, shares & dividends', 12),
-  ('reports', 'Reports', 13),
-  ('system', 'Audit, notifications & settings', 14)
-on conflict (id) do update
-  set label = excluded.label, sort_order = excluded.sort_order;
 
 -- ---------------------------------------------------------------------------
 -- Roles and ranks

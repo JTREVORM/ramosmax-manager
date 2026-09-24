@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Field, Input } from '@/components/ui/field';
@@ -13,22 +14,24 @@ import { normalizePhone } from '@/lib/auth/phone';
  * hidden Supabase Auth identity is a server-side detail and is never shown or
  * typed here.
  *
- * Phase A delivers the form, its validation and its responsive layout. The
- * credential exchange, the 5-per-15-minutes throttle, the uniform failure
- * message and the forced password change are Phase B, so submitting here
- * reports that plainly rather than pretending to sign anyone in.
+ * The form checks the phone number locally for immediate feedback, but the
+ * server is authoritative: it normalises the number again, applies the
+ * throttle, and answers every credential failure with the SAME message so the
+ * response never reveals whether a number is registered.
  */
 export function LoginForm() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [phone, setPhone] = React.useState('');
   const [password, setPassword] = React.useState('');
   const [reveal, setReveal] = React.useState(false);
   const [phoneError, setPhoneError] = React.useState<string>();
-  const [notice, setNotice] = React.useState<string>();
+  const [failure, setFailure] = React.useState<string>();
   const [busy, setBusy] = React.useState(false);
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
-    setNotice(undefined);
+    setFailure(undefined);
 
     const e164 = normalizePhone(phone);
     if (!e164) {
@@ -36,11 +39,36 @@ export function LoginForm() {
       return;
     }
     setPhoneError(undefined);
-    if (password.length === 0) return;
+    if (password.length === 0) {
+      setFailure('Incorrect phone number or password.');
+      return;
+    }
 
     setBusy(true);
     try {
-      setNotice('Sign-in is delivered in Phase B. The form and its checks are in place.');
+      const response = await fetch('/api/auth/sign-in', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ phone, password }),
+      });
+      const result = await response.json();
+
+      if (!result.ok) {
+        setFailure(result.message ?? 'Incorrect phone number or password.');
+        setPassword('');
+        return;
+      }
+
+      // A forced change is the only thing such an account may do.
+      if (result.mustChangePassword) {
+        router.replace('/change-password');
+        return;
+      }
+      const next = searchParams.get('next');
+      router.replace(next && next.startsWith('/') ? next : '/');
+      router.refresh();
+    } catch {
+      setFailure('Could not reach RamosMAX. Check your connection and try again.');
     } finally {
       setBusy(false);
     }
@@ -87,9 +115,13 @@ export function LoginForm() {
         </div>
       </Field>
 
-      {notice && (
-        <p role="status" className="bg-info-bg text-info rounded-[var(--radius)] px-3 py-2 text-sm">
-          {notice}
+      {failure && (
+        <p
+          role="alert"
+          id="sign-in-error"
+          className="bg-danger-bg text-danger rounded-[var(--radius)] px-3 py-2 text-sm"
+        >
+          {failure}
         </p>
       )}
 
