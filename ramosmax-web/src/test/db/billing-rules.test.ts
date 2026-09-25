@@ -246,10 +246,13 @@ describe('partial payments', () => {
         [invoice, requestId('m3')]);
 
       await becomeOwner(db);
+      // `created_at` is the TRANSACTION time, identical for all three, so the
+      // ledger's own numbering is what puts them in order.
       const { rows } = await db.query<{ method: string; code: string }>(`
         select p.method, a.code from public.payments p
           join public.financial_accounts a on a.id = p.financial_account_id
-         where p.invoice_id = $1 order by p.created_at`, [invoice]);
+          join public.financial_transactions t on t.id = p.financial_transaction_id
+         where p.invoice_id = $1 order by t.transaction_number`, [invoice]);
       expect(rows.map((r) => [r.method, r.code])).toEqual([
         ['cash', 'cash_at_hand'],
         ['mtn_merchant', 'mtn_merchant'],

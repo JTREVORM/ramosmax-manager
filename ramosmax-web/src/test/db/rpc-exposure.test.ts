@@ -1,0 +1,155 @@
+import { afterAll, describe, expect, it } from 'vitest';
+import { asAdminDb, closePool } from './harness';
+
+afterAll(closePool);
+
+/**
+ * THE ALLOW-LIST, GUARDED.
+ *
+ * PostgreSQL grants EXECUTE on a new function to PUBLIC, and `authenticated`
+ * inherits PUBLIC. Phase D closed that with a revoke, a default privilege and
+ * an explicit allow-list; this test makes the allow-list a fact that cannot
+ * drift. If a helper added later becomes callable from a browser session, this
+ * fails and names it.
+ *
+ * Adding a function here is a deliberate act: it means a signed-in user may
+ * call it, and that the function checks the caller's permissions itself.
+ */
+
+/** Read-only predicates the RLS policies themselves call. */
+const RLS_HELPERS = [
+  'is_signed_in()', 'is_active()', 'is_admin()', 'current_role_id()',
+  'has_permission(text)', 'has_either_permission(text,text)', 'own_with(text,uuid)',
+  'is_client_session()',
+];
+
+/** Pure helpers and figures the UI legitimately shows. */
+const PURE_HELPERS = [
+  'plate_key(text)', 'display_plate(text)', 'parse_plate(text)', 'is_plate_shape(text)',
+  'normalize_phone(text)', 'mask_phone(text)', 'mask_account_number(text)',
+  'eat_day(timestamp with time zone)', 'percent_of(bigint,bigint)',
+  'discount_approval_threshold_percent()', 'job_status_for(jsonb)', 'loyalty_config()',
+  'vehicle_loyalty(uuid)', 'search_vehicles(text,integer)', 'assignable_workers()',
+  'high_value_threshold_ugx()', 'max_amount_ugx()',
+];
+
+/** The command surface: every function a browser may ask for by name. */
+const COMMANDS = [
+  // access (Phase B)
+  'set_user_role(uuid,text,text)', 'set_user_active(uuid,boolean,text)',
+  'set_user_permissions(uuid,text[],text[],text)',
+  'grant_temporary_permission(uuid,text,timestamp with time zone,timestamp with time zone,text)',
+  'revoke_temporary_permission(uuid,text)',
+  // operations (Phase C)
+  'create_customer(text,text,text,text,text,text)',
+  'update_customer(uuid,text,text,text,text,text,text)',
+  'set_customer_status(uuid,boolean,text)',
+  'create_vehicle(text,text,text,text,integer,text,uuid,text)',
+  'update_vehicle(uuid,text,text,text,integer,text,text)',
+  'change_vehicle_plate(uuid,text,text)', 'set_vehicle_customer(uuid,uuid,text)',
+  'set_vehicle_status(uuid,boolean,text)',
+  'create_service(text,text,bigint,text,integer,boolean)',
+  'update_service(uuid,text,text,bigint,text,integer,boolean,text)',
+  'set_service_active(uuid,boolean)',
+  'create_service_intake(uuid,uuid[],text,boolean)', 'cancel_service_intake(uuid,text)',
+  'assign_worker_order(uuid,uuid,text)', 'reassign_worker_order(uuid,uuid,text)',
+  'cancel_worker_order(uuid,text)', 'update_worker_order_status(uuid,text,text,text)',
+  // money (Phase D)
+  'create_invoice(uuid)', 'apply_invoice_discount(uuid,text,bigint,text,text)',
+  'mark_invoice_credit(uuid,text)', 'record_payment(uuid,bigint,text,text,text,text,uuid)',
+  'reverse_payment(uuid,text)', 'cancel_invoice(uuid,text)',
+  'apply_loyalty_reward(uuid,bigint)', 'adjust_loyalty_points(uuid,integer,text)',
+  'reverse_loyalty_transaction(uuid,text)',
+  // finance (Phase E)
+  'create_financial_account(text,text,text,text,text,bigint)',
+  'update_financial_account(uuid,text,text,text,text,boolean,text)',
+  'record_opening_balance(uuid,bigint,text)',
+  'transfer_funds(uuid,uuid,bigint,text,text,date,text,text)',
+  'record_bank_deposit(uuid,uuid,bigint,text,text,date,text)',
+  'reconcile_account(uuid,bigint,text,date,text)',
+  'record_account_adjustment(uuid,text,bigint,text,text,uuid)',
+  'reverse_financial_transaction(uuid,text)',
+  // expenses (Phase E)
+  'create_expense_category(text)', 'update_expense_category(text,text,boolean,text)',
+  'create_expense(text,text,bigint,date,text,text,uuid,text,text,boolean)',
+  'update_expense(uuid,text,text,bigint,date,text,uuid,text,text,text)',
+  'update_expense_status(uuid,text,text,text)', 'pay_expense(uuid,uuid,text,text,date)',
+  'create_recurring_expense(text,text,bigint,text,date,text,uuid,integer,text)',
+  'update_recurring_expense(uuid,text,bigint,date,integer,text,uuid,text,boolean,text)',
+  // inventory (Phase E)
+  'create_inventory_item(text,text,text,integer,integer,text,boolean,uuid,bigint,text,integer)',
+  'update_inventory_item(uuid,text,text,text,integer,integer,text,boolean,uuid,bigint,boolean,text)',
+  'record_stock_movement(uuid,text,integer,text,text,text,text,bigint,uuid,uuid)',
+  'adjust_stock(uuid,integer,text,text)', 'reverse_stock_movement(uuid,text)',
+  'create_supplier(text,text,text,text,text,text)',
+  'update_supplier(uuid,text,text,text,text,text,text,boolean,text)',
+  'create_purchase(uuid,jsonb,text,date,text,text)',
+  'update_purchase_status(uuid,text,text)', 'receive_purchase(uuid,text,uuid,text)',
+  'pay_purchase(uuid,uuid,text,text)',
+];
+
+const ALLOWED = new Set([...RLS_HELPERS, ...PURE_HELPERS, ...COMMANDS]);
+
+async function executableByClients(): Promise<string[]> {
+  return asAdminDb(async (db) => {
+    const { rows } = await db.query<{ signature: string }>(`
+      -- Types only. Identity arguments would include the parameter NAMES,
+      -- which are not part of what is being granted.
+      select p.proname || '(' || oidvectortypes(p.proargtypes) || ')' as signature
+        from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'app'
+         and has_function_privilege('authenticated', p.oid, 'execute')
+       order by 1`);
+    // `oidvectortypes` separates with ", "; the list above uses plain commas.
+    return rows.map((r) => r.signature.replace(/,\s+/g, ','));
+  });
+}
+
+describe('no app function is callable by a client unless it is on the allow-list', () => {
+  it('exposes nothing unexpected', async () => {
+    const exposed = await executableByClients();
+    const surprises = exposed.filter((s) => !ALLOWED.has(s));
+    expect(surprises, 'these became browser-callable without being allow-listed').toEqual([]);
+  });
+
+  it('still exposes everything the application needs', async () => {
+    const exposed = new Set(await executableByClients());
+    const missing = [...ALLOWED].filter((s) => !exposed.has(s));
+    expect(missing, 'these are allow-listed but not actually granted').toEqual([]);
+  });
+
+  it('keeps the money and stock machinery off the list', async () => {
+    const exposed = new Set(await executableByClients());
+    for (const internal of [
+      'post_transaction', 'move_account', 'summarise_day', 'merge_account_totals',
+      'post_ledger_entry', 'post_purchase_payment', 'move_stock', 'reverse_spending_record',
+      'sweep_recurring_expenses', 'claim_request', 'complete_request', 'next_reference',
+      'audit', 'audit_auth', 'post_loyalty', 'effective_permissions',
+    ]) {
+      const found = [...exposed].filter((s) => s.startsWith(`${internal}(`));
+      expect(found, `${internal} is callable by a client`).toEqual([]);
+    }
+  });
+
+  it('grants nothing at all to anon', async () => {
+    await asAdminDb(async (db) => {
+      const { rows } = await db.query<{ n: string }>(`
+        select count(*)::text as n
+          from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+         where n.nspname = 'app' and has_function_privilege('anon', p.oid, 'execute')`);
+      expect(Number(rows[0].n)).toBe(0);
+    });
+  });
+
+  it('leaves no default privilege that would expose a future function', async () => {
+    await asAdminDb(async (db) => {
+      const { rows } = await db.query<{ n: string }>(`
+        select count(*)::text as n from pg_default_acl d
+          join pg_namespace n on n.oid = d.defaclnamespace
+         where n.nspname = 'app' and d.defaclobjtype = 'f'
+           and array_to_string(d.defaclacl, ',') like '%=X/%'
+           and array_to_string(d.defaclacl, ',') not like '%postgres=X/%'`);
+      expect(Number(rows[0].n)).toBe(0);
+    });
+  });
+});

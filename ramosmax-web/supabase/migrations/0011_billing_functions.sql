@@ -211,7 +211,7 @@ begin
 
   if v_id is null then
     raise exception 'No active account is set up for this payment method.'
-      using errcode = 'failed_precondition', detail = 'account';
+      using errcode = 'raise_exception', detail = 'account';
   end if;
   return v_id;
 end;

@@ -10,7 +10,7 @@ The Next.js + Supabase migration of the RamosMAX Automotive Care Management Syst
 Migration plan: [`../migration/RAMOSMAX_WEB_MIGRATION_PLAN.md`](../migration/RAMOSMAX_WEB_MIGRATION_PLAN.md)
 Reference version: Phase 9, commit `113219d`.
 
-## Status — Phase D (billing and loyalty) complete
+## Status — Phase E (finance, expenses and inventory) complete
 
 | Phase | Scope                                                     | State       |
 | ----- | --------------------------------------------------------- | ----------- |
@@ -18,18 +18,23 @@ Reference version: Phase 9, commit `113219d`.
 | B     | Auth, users, roles, permissions, RLS parity               | **done**    |
 | C     | Customers, vehicles, services, intake, jobs               | **done**    |
 | D     | Invoices, discounts, payments, receipts, credit, loyalty  | **done**    |
-| E–I   | Finance, inventory, workforce, ownership, reporting       | not started |
+| E     | Finance, expenses, banking, reconciliation, inventory     | **done**    |
+| F–I   | Workforce, ownership, after-hours, reporting              | not started |
 | J     | Hardening and parity suite                                | not started |
 | K     | Data migration and cutover                                | not started |
 
-Phase D pulled a **slice of Phase E (Finance) forward**, because the reference
-implementation posts every customer payment to the finance ledger inside the
-same transaction as the payment itself, and requirement 5 ("there must never be
-a state where the payment exists but its required financial posting does not")
-cannot be met without it. What exists is `financial_accounts`,
-`financial_transactions` and `finance_daily_summaries`, serving customer
-payments and their reversals only. Expenses, banking, reconciliation, float and
-the Finance screens remain Phase E.
+Phase D pulled a slice of Finance forward — accounts, the ledger and the daily
+summaries — because the reference implementation posts every customer payment
+to the ledger inside the same transaction as the payment. **Phase E extended
+that same slice** rather than building a second financial model: the same
+`financial_accounts`, `financial_transactions` and `finance_daily_summaries`
+now carry expense payments, stock purchases, transfers, deposits, adjustments
+and opening balances, with `financial_transaction_entries` recording what each
+transaction did to each account.
+
+**After-hours and cash handovers are deliberately NOT in Phase E.** Sessions,
+authorisation windows, float issuance, custody handovers and the
+discrepancy-to-loss workflow get their own phase.
 
 ## Commands
 
@@ -57,6 +62,12 @@ CHROMIUM_PATH=/path/to/chromium node scripts/check-auth-e2e.mjs
 npm run db:reset
 CHROMIUM_PATH=/path/to/chromium node scripts/check-operations-e2e.mjs
 CHROMIUM_PATH=/path/to/chromium node scripts/check-billing-e2e.mjs
+
+# Phase E asserts absolute balances, so it needs a database where no money has
+# moved yet. Reset again before running it, and run the responsive suite last.
+npm run db:reset
+CHROMIUM_PATH=/path/to/chromium node scripts/check-finance-e2e.mjs
+CHROMIUM_PATH=/path/to/chromium node scripts/check-responsive.mjs
 ```
 
 ## The worker / customer-phone boundary
@@ -112,6 +123,53 @@ rounding the browser can influence.
 - **Money display follows `Money.format()`** in the reference implementation:
   the currency CODE and a normal space, `UGX 25,000`. `Intl.NumberFormat`'s
   currency style would render "USh" with a non-breaking space.
+
+## Finance, expenses and stock
+
+One ledger, one posting path. `app.post_transaction` is the only thing that
+moves a balance, and it writes the immutable ledger entry and the per-account
+movements in the same statement, so:
+
+```
+financial_accounts.balance_ugx = Σ financial_transaction_entries.delta_ugx
+```
+
+holds for every account and every transaction type, including both sides of a
+transfer. `app.move_stock` plays the same role for quantities.
+
+- **No overdraft, ever.** An outflow larger than the balance is refused with
+  what is available. This is a row lock plus a CHECK constraint, not a
+  front-end guard.
+- **Stock never goes negative**, by the same two mechanisms.
+- **Nothing is edited to correct it.** A mistake is reversed (the mirror entry)
+  or adjusted (an explicit, authorised movement). Both stay in the record.
+- **Creating, reviewing or approving an expense moves no money.** Only
+  `app.pay_expense` does, in one transaction with the ledger entry and the
+  status change.
+- **A stock purchase is an acquisition, not an operating expense.** Paying one
+  posts `inventory_purchase_payment` and creates no expense record, so expense
+  reports never double-count stock. This is the reference implementation's
+  deliberate accounting choice, and it is not configurable.
+- **Cash awaiting banking** is part of the cash balance, never extra money. It
+  grows with cash takings and shrinks when cash reaches a bank, clamped to
+  `0 … balance` on every movement.
+- **A reconciliation changes nothing.** The server reads the system balance
+  inside the transaction; the browser only says what was counted. Closing a
+  difference is a separate adjustment that must match it exactly.
+- **The high-value stock-out threshold** comes from `settings/inventory`
+  (`highValueThresholdUgx`, default UGX 200,000) and is applied by the
+  database, not by the screen that warns about it.
+- **Recurring expenses are never paid automatically.** The sweep creates one
+  DRAFT per due date and advances the schedule. It is not callable from a
+  browser session.
+
+## The allow-list of callable functions
+
+`0014` and `0020` revoke EXECUTE from `PUBLIC` across the `app` schema and
+grant an explicit list. `src/test/db/rpc-exposure.test.ts` fails if a function
+becomes callable from a browser session without being on that list, and if
+anything on the list is not actually granted — so an internal helper added
+later cannot quietly become part of the API.
 
 ## Architecture rules
 

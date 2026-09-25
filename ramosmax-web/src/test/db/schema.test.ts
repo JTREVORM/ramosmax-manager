@@ -313,3 +313,27 @@ describe('updated_at maintenance', () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+describe('reference numbers', () => {
+  it('pads to the width and grows past it instead of repeating', async () => {
+    await asAdminDb(async (db) => {
+      // lpad TRUNCATES a string longer than its width, which made the 1,470th
+      // reference collide with the 147th. Padding must only ever pad.
+      // Sequences do not roll back, so start from a known point.
+      await db.query(`select setval('app.test_reference_seq', 1, false)`);
+      const { rows } = await db.query<{ short: string; exact: string; long: string }>(`
+        select app.next_reference('test_reference_seq', 'T-', 3) as short,
+               app.next_reference('test_reference_seq', 'T-', 1) as exact,
+               app.next_reference('test_reference_seq', 'T-', 8) as long`);
+      expect(rows[0].short).toBe('T-001');
+      expect(rows[0].exact).toBe('T-2');
+      expect(rows[0].long).toBe('T-00000003');
+
+      await db.query(`select setval('app.test_reference_seq', 1469)`);
+      const { rows: big } = await db.query<{ n: string }>(
+        `select app.next_reference('test_reference_seq', 'T-', 3) as n`);
+      expect(big[0].n).toBe('T-1470');
+    });
+  });
+});

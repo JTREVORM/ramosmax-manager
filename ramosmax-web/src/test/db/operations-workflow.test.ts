@@ -186,15 +186,23 @@ describe('customer → vehicle → intake → assign → work → ready to invoi
          where n.nspname = 'app' and p.proname = 'create_invoice'`);
       expect(Number(invoicing[0].n)).toBe(1);
 
-      // The current boundary is Phase E: expenses, inventory, payroll, shares
-      // and after-hours have no functions yet.
+      // Phase E added finance, expenses and inventory.
+      const { rows: phaseE } = await db.query<{ proname: string }>(`
+        select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+         where n.nspname = 'app'
+           and p.proname in ('pay_expense', 'transfer_funds', 'record_bank_deposit',
+                             'reconcile_account', 'receive_purchase', 'adjust_stock')`);
+      expect(phaseE).toHaveLength(6);
+
+      // The current boundary is Phase F: payroll, attendance, ownership and
+      // after-hours have no functions yet.
       const { rows: later } = await db.query<{ n: string }>(`
         select count(*)::text as n from pg_proc p join pg_namespace n on n.oid = p.pronamespace
          where n.nspname = 'app'
-           and (p.proname like '%expense%' or p.proname like '%payroll%'
-                or p.proname like '%attendance%' or p.proname like '%share%'
+           and (p.proname like '%payroll%' or p.proname like '%attendance%'
+                or p.proname like '%allowance%' or p.proname like '%shareholder%'
                 or p.proname like '%dividend%' or p.proname like '%after_hours%'
-                or p.proname like '%stock%' or p.proname like '%inventory%')`);
+                or p.proname like '%handover%')`);
       expect(Number(later[0].n)).toBe(0);
 
       // The vehicle can start a new job now that this one is finished.

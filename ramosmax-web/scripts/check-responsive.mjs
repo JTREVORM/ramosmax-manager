@@ -314,6 +314,115 @@ async function checkBilling(page, viewport, invoiceId) {
   }
 }
 
+/**
+ * At least one expense and one stocked item, so the Phase E screens have
+ * something to show. Reuses what is there; otherwise drives the same RPCs the
+ * application does, as the seeded manager.
+ */
+async function moneyFixtures(db) {
+  const MANAGER = '00000000-0000-4000-8000-000000000002';
+  const asUser = async (uid, sql, params = []) => {
+    await db.query('begin');
+    try {
+      await db.query(`select set_config('request.jwt.claims', $1, true)`, [
+        JSON.stringify({ sub: uid, role: 'authenticated' }),
+      ]);
+      await db.query('set local role authenticated');
+      const result = await db.query(sql, params);
+      await db.query('commit');
+      return result;
+    } catch (e) {
+      await db.query('rollback');
+      throw e;
+    }
+  };
+  const unique = Math.random().toString(36).slice(2, 8);
+
+  let expense = (await db.query(`select id from public.expenses order by created_at limit 1`)).rows[0];
+  if (!expense) {
+    expense = (await asUser(MANAGER,
+      `select expense_id as id from app.create_expense('utilities', $1, 250000, current_date, $2,
+                                                        'A Vendor', null, null, null, true)`,
+      [`Responsive fixture ${unique}`, `resp-exp-${unique}`])).rows[0];
+  }
+
+  let item = (await db.query(`select id from public.inventory_items order by created_at limit 1`)).rows[0];
+  if (!item) {
+    const supplier = (await asUser(MANAGER,
+      `select supplier_id as id from app.create_supplier($1)`, [`Responsive Supplier ${unique}`])).rows[0];
+    item = (await asUser(MANAGER,
+      `select item_id as id from app.create_inventory_item($1, 'chemicals', 'litre', 2, 4, null,
+                                                            true, $2, 12000, null, 25)`,
+      [`Responsive Item ${unique}`, supplier.id])).rows[0];
+  }
+
+  return { expense: expense.id, item: item.id };
+}
+
+/**
+ * The Phase E screens at every breakpoint: finance, expenses and inventory are
+ * the densest data in the system, and a manager reads them on a phone.
+ */
+async function checkPhaseE(page, viewport, fixtures) {
+  const screens = [
+    ['/finance', 'Finance'],
+    ['/transactions', 'Transactions'],
+    ['/reconciliation', 'Reconciliation'],
+    ['/finance/transfers', 'Transfers'],
+    ['/finance/banking', 'Banking'],
+    ['/expenses', 'Expenses'],
+    ['/expenses/new', 'Record expense'],
+    ['/expenses/recurring', 'Recurring expenses'],
+    ['/expenses/categories', 'Expense categories'],
+    ['/inventory', 'Inventory'],
+    ['/inventory/items/new', 'New item'],
+    ['/inventory/suppliers', 'Suppliers'],
+    ['/inventory/purchases', 'Purchases'],
+    ['/inventory/purchases/new', 'New purchase'],
+    ['/inventory/movements', 'Stock movements'],
+  ];
+
+  for (const [path, title] of screens) {
+    await page.goto(`${BASE}${path}`, { waitUntil: 'domcontentloaded' });
+    const heading = await page.getByRole('heading', { level: 1 }).first().textContent();
+    check(heading.trim() === title, `${path} renders`);
+    check((await pageOverflow(page)) <= 0, `${path} has no horizontal scroll`);
+  }
+  await page.goto(`${BASE}/finance`, { waitUntil: 'domcontentloaded' });
+  await page.screenshot({ path: `${OUT}/phaseE-${viewport.name}-finance.png`, fullPage: true });
+
+  // Detail screens.
+  for (const [path, label] of [
+    [`/expenses/${fixtures.expense}`, 'the expense detail'],
+    [`/inventory/items/${fixtures.item}`, 'the item detail'],
+  ]) {
+    await page.goto(`${BASE}${path}`, { waitUntil: 'domcontentloaded' });
+    check((await pageOverflow(page)) <= 0, `${label} has no horizontal scroll`);
+    await page.screenshot({ path: `${OUT}/phaseE-${viewport.name}-${label.split(' ')[1]}.png`, fullPage: true });
+  }
+
+  // The ledger is the widest table in the system: cards on a phone, table above.
+  await page.goto(`${BASE}/transactions`, { waitUntil: 'domcontentloaded' });
+  const table = page.getByRole('table').first();
+  const list = page.getByRole('list', { name: 'Transactions' }).first();
+  if (viewport.width >= 768) {
+    check(await table.isVisible(), 'the ledger is a table on a wide screen');
+    check(!(await list.isVisible()), 'the ledger card list is hidden on a wide screen');
+  } else {
+    check(await list.isVisible(), 'the ledger renders as cards on a phone');
+    check(!(await table.isVisible()), 'the ledger table is hidden on a phone');
+  }
+
+  // A money form on a phone must still be usable.
+  await page.goto(`${BASE}/finance/transfers`, { waitUntil: 'domcontentloaded' });
+  const amount = await page.locator('input[name="amount_ugx"]').boundingBox();
+  check(amount !== null && amount.height >= 44, 'the transfer amount field meets the 44px touch target');
+  const submit = await page.getByRole('button', { name: 'Transfer' }).boundingBox();
+  check(submit !== null && submit.height >= 44, 'the transfer submit meets the 44px touch target');
+  check((await pageOverflow(page)) <= 0, 'the transfer form has no horizontal scroll');
+  await page.screenshot({ path: `${OUT}/phaseE-${viewport.name}-transfer.png`, fullPage: true });
+}
+
 async function checkDarkMode(browser) {
   const context = await browser.newContext({
     viewport: { width: 390, height: 844 },
@@ -336,6 +445,7 @@ async function main() {
   const db = new pg.Client({ connectionString: DB });
   await db.connect();
   const invoiceId = await unpaidInvoice(db);
+  const moneyIds = await moneyFixtures(db);
 
   const browser = await chromium.launch({
     // The sandbox ships a pinned Chromium; use it rather than downloading one.
@@ -355,6 +465,7 @@ async function main() {
     await checkShell(page, viewport);
     await checkOperations(page, viewport);
     await checkBilling(page, viewport, invoiceId);
+    await checkPhaseE(page, viewport, moneyIds);
 
     await context.close();
   }

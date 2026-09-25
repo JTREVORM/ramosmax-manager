@@ -23,6 +23,21 @@ const TONES: Record<string, BadgeTone> = {
   paid: 'success',
   reversed: 'danger',
 
+  // Stock levels.
+  ok: 'success',
+  low: 'warning',
+  out_of_stock: 'danger',
+
+  // Expenses and purchases.
+  pending_review: 'warning',
+  pending_approval: 'warning',
+  approved: 'info',
+  rejected: 'danger',
+  received: 'success',
+  balanced: 'success',
+  discrepancy: 'warning',
+  adjusted: 'info',
+
   // Loyalty rewards.
   available: 'success',
   redeemed: 'info',
@@ -32,6 +47,9 @@ const TONES: Record<string, BadgeTone> = {
 const LABELS: Record<string, string> = {
   in_progress: 'In progress',
   partially_paid: 'Partially paid',
+  out_of_stock: 'Out of stock',
+  pending_review: 'Awaiting review',
+  pending_approval: 'Awaiting approval',
 };
 
 export function StatusBadge({ status }: { status: string }) {
