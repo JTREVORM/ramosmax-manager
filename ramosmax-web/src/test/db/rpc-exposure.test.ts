@@ -55,6 +55,12 @@ const PURE_HELPERS = [
   'max_salary_ugx()',
   'eat_day_start(date)',
   'iso_weekday(date)',
+  // ownership (final phase): the two policies, the derived lines of an entry
+  // the caller may already read, and the percentage arithmetic.
+  'share_policy()',
+  'dividend_policy()',
+  'share_transaction_lines(uuid)',
+  'ownership_percent(bigint,bigint)',
 ];
 
 /** The command surface: every function a browser may ask for by name. */
@@ -153,6 +159,30 @@ const COMMANDS = [
   'create_salary_deduction(uuid,text,bigint,text,text,text,bigint,date)',
   'decide_salary_deduction(uuid,text,text)',
   'cancel_salary_deduction(uuid,text)',
+  // ownership (final phase)
+  'create_shareholder(text,text,text,text,text,text,text,date,text)',
+  'update_shareholder(uuid,text,text,text,text,text,text,text,text)',
+  'set_shareholder_status(uuid,text,text)',
+  'link_shareholder_account(uuid,uuid,text)',
+  'create_share_class(text,text,bigint,text)',
+  'update_share_class(text,text,text,bigint,boolean,text)',
+  'update_shareholding_policy(text,jsonb,text)',
+  'issue_shares(uuid,text,bigint,text,date,text,bigint,uuid,date,text,text,text)',
+  'transfer_shares(uuid,uuid,text,bigint,text,text,date,text,text)',
+  'adjust_shares(uuid,text,bigint,text,text,boolean,date,text,text)',
+  'decide_share_transaction(uuid,text,text)',
+  'record_share_contribution(uuid,bigint,text,text,uuid,date,text,text)',
+  'reverse_share_contribution(uuid,text)',
+  'reverse_share_transaction(uuid,text,text)',
+  'ownership_as_of(date,text)',
+  'my_shareholding()',
+  'create_dividend(text,date,text,text,bigint,bigint,date,date,text,text)',
+  'update_dividend(uuid,text,date,text,bigint,bigint,date,date,text,text)',
+  'calculate_dividend(uuid)',
+  'update_dividend_status(uuid,text,text)',
+  'pay_dividend(uuid,uuid[],uuid,text,text,date)',
+  'reverse_dividend_payment(uuid,text)',
+  'cancel_dividend(uuid,text)',
 ];
 
 const ALLOWED = new Set([...RLS_HELPERS, ...PURE_HELPERS, ...COMMANDS]);
@@ -215,6 +245,21 @@ describe('no app function is callable by a client unless it is on the allow-list
       'read_employee',
       'policy_int',
       'policy_bool',
+      // Final phase: the ownership machinery the server keeps to itself.
+      'rebuild_ownership',
+      'post_share_transaction',
+      'submit_share_transaction',
+      'write_share_contribution',
+      'post_ownership_reversal',
+      'holdings_as_of',
+      'holdings_by_class',
+      'never_negative',
+      'locked_record_date',
+      'read_shareholder',
+      'read_share_class',
+      'read_dividend',
+      'contribution_for',
+      'check_share_payment',
     ]) {
       const found = [...exposed].filter((s) => s.startsWith(`${internal}(`));
       expect(found, `${internal} is callable by a client`).toEqual([]);

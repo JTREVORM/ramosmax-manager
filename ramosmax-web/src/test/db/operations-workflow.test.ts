@@ -204,14 +204,21 @@ describe('customer → vehicle → intake → assign → work → ready to invoi
                              'prepare_payroll', 'pay_payroll', 'create_loss_incident')`);
       expect(phaseF).toHaveLength(6);
 
-      // The current boundary is Phase G: ownership, dividends, after-hours and
-      // cash handovers have no functions yet.
+      // Ownership has arrived too.
+      const { rows: ownership } = await db.query<{ proname: string }>(`
+        select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+         where n.nspname = 'app'
+           and p.proname in ('create_shareholder', 'issue_shares', 'transfer_shares',
+                             'calculate_dividend', 'pay_dividend', 'my_shareholding')`);
+      expect(ownership).toHaveLength(6);
+
+      // The current boundary: after-hours and cash handovers have no functions
+      // yet.
       const { rows: later } = await db.query<{ n: string }>(`
         select count(*)::text as n from pg_proc p join pg_namespace n on n.oid = p.pronamespace
          where n.nspname = 'app'
-           and (p.proname like '%shareholder%' or p.proname like '%share_%'
-                or p.proname like '%dividend%' or p.proname like '%after_hours%'
-                or p.proname like '%handover%')`);
+           and (p.proname like '%after_hours%' or p.proname like '%handover%'
+                or p.proname like '%custody%')`);
       expect(Number(later[0].n)).toBe(0);
 
       // The vehicle can start a new job now that this one is finished.
