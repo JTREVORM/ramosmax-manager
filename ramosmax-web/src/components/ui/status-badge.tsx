@@ -13,10 +13,25 @@ const TONES: Record<string, BadgeTone> = {
   accepted: 'info',
   in_progress: 'warning',
   paused: 'warning',
+
+  // Payment status, with the tones the reference implementation uses in
+  // `PaymentStatusChip` (billing_widgets.dart): an unpaid invoice is a problem,
+  // a part payment and credit are things to watch, paid is settled.
+  unpaid: 'danger',
+  partially_paid: 'warning',
+  credit: 'warning',
+  paid: 'success',
+  reversed: 'danger',
+
+  // Loyalty rewards.
+  available: 'success',
+  redeemed: 'info',
+  revoked: 'neutral',
 };
 
 const LABELS: Record<string, string> = {
   in_progress: 'In progress',
+  partially_paid: 'Partially paid',
 };
 
 export function StatusBadge({ status }: { status: string }) {

@@ -12,6 +12,19 @@ describe('money is whole Ugandan shillings', () => {
     expect(formatAmount(5_000)).toBe('5,000');
   });
 
+  /**
+   * `Money.format()` in the reference implementation writes the currency CODE
+   * and a normal space: `UGX 25,000`. Intl's currency style would render the
+   * ICU symbol "USh" joined by a non-breaking space, which is a different
+   * figure on a customer's receipt.
+   */
+  it('shows the amount exactly as the reference implementation does', () => {
+    expect(formatUgx(25_000)).toBe('UGX 25,000');
+    expect(formatUgx(0)).toBe('UGX 0');
+    expect(formatUgx(90_000)).toBe('UGX 90,000');
+    expect(formatUgx(25_000)).not.toMatch(/USh|\u00a0/);
+  });
+
   it('parses typed amounts, separators and all', () => {
     expect(parseUgx('1,250,000')).toBe(1_250_000);
     expect(parseUgx('  5000 ')).toBe(5000);

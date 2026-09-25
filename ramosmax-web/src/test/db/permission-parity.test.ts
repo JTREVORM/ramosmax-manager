@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from 'vitest';
-import { asAdminDb, asClient, becomeClient, closePool, makeUser, SEED } from './harness';
+import { asAdminDb, becomeClient, closePool, makeUser, SEED } from './harness';
 import {
   ADMIN_ONLY_PERMISSIONS,
   AUTHORIZATION_ONLY_PERMISSIONS,
@@ -39,10 +39,16 @@ const profile = (role: Role, over: Partial<AccessProfile> = {}): AccessProfile =
   ...over,
 });
 
+/**
+ * app.effective_permissions is server-only: exposing it would let any signed-in
+ * user read anyone's access. It is read here as the server, which is how the
+ * application reads it too.
+ */
 async function dbPermissions(uid: string): Promise<Set<string>> {
-  return asClient(uid, async (session) => {
-    const { rows } = await session.query(`select unnest(app.effective_permissions()) as key`);
-    return new Set(rows.map((r) => r.key as string));
+  return asAdminDb(async (db) => {
+    const { rows } = await db.query<{ key: string }>(
+      `select unnest(app.effective_permissions($1)) as key`, [uid]);
+    return new Set(rows.map((r) => r.key));
   });
 }
 
@@ -93,12 +99,13 @@ describe('account state zeroes the permission set', () => {
       // PostgreSQL port
       await asAdminDb(async (db) => {
         const uid = await makeUser(db, { role: 'admin', ...(sql as object) } as never);
-        await becomeClient(db, uid);
-        const { rows } = await db.query(
-          `select coalesce(array_length(app.effective_permissions(), 1), 0) as n`,
-        );
+        // Read as the server: effective_permissions is not client-callable.
+        const { rows } = await db.query<{ n: string }>(
+          `select coalesce(array_length(app.effective_permissions($1), 1), 0) as n`, [uid]);
         expect(Number(rows[0].n)).toBe(0);
-        const active = await db.query(`select app.is_active() as ok`);
+
+        await becomeClient(db, uid);
+        const active = await db.query<{ ok: boolean }>(`select app.is_active() as ok`);
         expect(active.rows[0].ok).toBe(false);
       });
     });

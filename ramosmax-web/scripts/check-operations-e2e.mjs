@@ -272,7 +272,7 @@ const worker = await signIn('0772000004');
 }
 
 // ---------------------------------------------------------------------------
-console.log('\n  the job is ready to invoice, and stops there');
+console.log('\n  the job is ready to invoice, and hands over to Phase D');
 {
   const { rows } = await db.query(
     `select status, completed_at from public.service_intakes where id = $1`,
@@ -284,9 +284,13 @@ console.log('\n  the job is ready to invoice, and stops there');
   const { page } = manager;
   await page.goto(`${BASE}/jobs/${jobId}`, { waitUntil: 'domcontentloaded' });
   const body = await page.textContent('body');
-  check(body.includes('ready to invoice'), 'the job reports itself ready to invoice');
-  check(body.includes('next phase'), 'and says invoicing is not in this phase');
-  check(!/Create invoice/i.test(body), 'no invoicing action is offered');
+  check(body.includes('Ready to invoice'), 'the job reports itself ready to invoice');
+  // Phase D added the invoicing action here. This script stops at the
+  // hand-over: creating the invoice belongs to check-billing-e2e.
+  check(
+    (await page.getByRole('button', { name: 'Create invoice' }).count()) === 1,
+    'the invoicing action is offered to a manager',
+  );
 }
 
 // ---------------------------------------------------------------------------

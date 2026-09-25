@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from 'vitest';
-import { asAdminDb, becomeClient, closePool, makeUser, SEED } from './harness';
+import { asAdminDb, becomeServer, closePool, makeUser, SEED } from './harness';
 import { normalizePhone } from '@/lib/auth/phone';
 import { passwordProblems } from '@/lib/auth/password-policy';
 
@@ -425,9 +425,10 @@ describe('completing a password change', () => {
 describe('the audit helper', () => {
   it('attributes an entry to the caller and marks it server-written', async () => {
     await asAdminDb(async (db) => {
-      await becomeClient(db, SEED.admin);
+      // app.audit is server-only: a client must never be able to write an
+      // entry attributed to the server.
+      await becomeServer(db, SEED.admin);
       await db.query(`select app.audit('test.action', 'test', 'rec-1')`);
-      await db.query('reset role');
       const { rows } = await db.query(
         `select user_id, user_role, source from public.audit_logs where action = 'test.action'`,
       );

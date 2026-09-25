@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from 'vitest';
-import { asAdminDb, becomeClient, becomeOwner, closePool, makeUser, SEED } from './harness';
+import { asAdminDb, becomeClient, becomeOwner, becomeServer, closePool, makeUser, SEED } from './harness';
 
 afterAll(closePool);
 
@@ -60,7 +60,7 @@ describe('rank rules', () => {
   it('refuses a manager administering a PEER rank (auditor)', async () => {
     await asAdminDb(async (db) => {
       const target = await makeUser(db, { role: 'auditor' });
-      await becomeClient(db, SEED.manager);
+      await becomeServer(db, SEED.manager);
       const error = await db.expectError(`select app.require_can_administer($1)`, [target]);
       expect(error).toMatch(/more junior role/);
     });
@@ -68,7 +68,7 @@ describe('rank rules', () => {
 
   it('refuses ANY non-admin administering an administrator', async () => {
     await asAdminDb(async (db) => {
-      await becomeClient(db, SEED.manager);
+      await becomeServer(db, SEED.manager);
       const error = await db.expectError(`select app.require_can_administer($1)`, [SEED.admin]);
       expect(error).toMatch(/Only an Administrator can manage Administrator accounts/);
     });
@@ -77,14 +77,14 @@ describe('rank rules', () => {
   it('allows a manager administering a junior role', async () => {
     await asAdminDb(async (db) => {
       const target = await makeUser(db, { role: 'worker' });
-      await becomeClient(db, SEED.manager);
+      await becomeServer(db, SEED.manager);
       expect(await db.expectError(`select app.require_can_administer($1)`, [target])).toBeNull();
     });
   });
 
   it('refuses a manager assigning a role at or above their own', async () => {
     await asAdminDb(async (db) => {
-      await becomeClient(db, SEED.manager);
+      await becomeServer(db, SEED.manager);
       expect(await db.expectError(`select app.require_can_assign_role('admin')`)).toMatch(
         /Only an Administrator can assign the Administrator role/,
       );
@@ -203,7 +203,7 @@ describe('password resets', () => {
   it('lets a manager reset a WORKER password', async () => {
     await asAdminDb(async (db) => {
       const target = await makeUser(db, { role: 'worker' });
-      await becomeClient(db, SEED.manager);
+      await becomeServer(db, SEED.manager);
       const { rows } = await db.query(`select app.prepare_password_reset($1) as password`, [
         target,
       ]);
@@ -220,7 +220,7 @@ describe('password resets', () => {
   it('refuses a manager resetting a CASHIER password, despite the lower rank', async () => {
     await asAdminDb(async (db) => {
       const target = await makeUser(db, { role: 'cashier' });
-      await becomeClient(db, SEED.manager);
+      await becomeServer(db, SEED.manager);
       const error = await db.expectError(`select app.prepare_password_reset($1)`, [target]);
       expect(error).toMatch(/only reset passwords for Workers/);
     });
@@ -228,7 +228,7 @@ describe('password resets', () => {
 
   it('refuses resetting your own password through the admin path', async () => {
     await asAdminDb(async (db) => {
-      await becomeClient(db, SEED.admin);
+      await becomeServer(db, SEED.admin);
       const error = await db.expectError(`select app.prepare_password_reset($1)`, [SEED.admin]);
       expect(error).toMatch(/own password from your profile/);
     });
@@ -237,7 +237,7 @@ describe('password resets', () => {
   it('never writes the generated password into the audit trail', async () => {
     await asAdminDb(async (db) => {
       const target = await makeUser(db, { role: 'worker' });
-      await becomeClient(db, SEED.admin);
+      await becomeServer(db, SEED.admin);
       const { rows } = await db.query(`select app.prepare_password_reset($1) as password`, [
         target,
       ]);

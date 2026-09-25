@@ -3,7 +3,7 @@
 import { DataView, type DataColumn } from '@/components/data/data-view';
 import { Badge } from '@/components/ui/badge';
 import { StatusBadge } from '@/components/ui/status-badge';
-import { formatAmount } from '@/lib/format/money';
+import { formatUgx } from '@/lib/format/money';
 import type { ServiceRow } from '@/lib/server/operations';
 
 const columns: DataColumn<ServiceRow>[] = [
@@ -11,10 +11,10 @@ const columns: DataColumn<ServiceRow>[] = [
   { id: 'category', header: 'Category', role: 'secondary', cell: (s) => s.category },
   {
     id: 'price',
-    header: 'Price (UGX)',
+    header: 'Price',
     role: 'trailing',
     numeric: true,
-    cell: (s) => formatAmount(s.price_ugx),
+    cell: (s) => formatUgx(s.price_ugx),
   },
   {
     id: 'duration',

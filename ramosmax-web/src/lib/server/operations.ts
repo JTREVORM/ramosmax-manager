@@ -254,17 +254,15 @@ export interface WorkerOption {
   role: string;
 }
 
-/** Staff who may be assigned work: active, and holding jobs.complete. */
+/**
+ * Staff who may be assigned work: active, and holding jobs.complete.
+ *
+ * This goes through a function rather than a query so the client never needs
+ * app.effective_permissions, which would let anyone read anyone's access.
+ */
 export async function listAssignableWorkers(): Promise<WorkerOption[]> {
   const uid = await requireUser();
-  return queryAsUser<WorkerOption>(
-    uid,
-    `select u.id, u.full_name, u.role
-       from public.users u
-      where u.active
-        and 'jobs.complete' = any (app.effective_permissions(u.id))
-      order by case when u.role = 'worker' then 0 else 1 end, u.full_name`,
-  );
+  return queryAsUser<WorkerOption>(uid, `select * from app.assignable_workers()`);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -280,4 +278,278 @@ export async function callRpc<T = Record<string, unknown>>(
 ): Promise<T[]> {
   const uid = await requireUser();
   return rpcAsUser<T>(uid, fn, params);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Phase D — invoices, payments, receipts, credit, loyalty                     */
+/* -------------------------------------------------------------------------- */
+
+export interface InvoiceRow {
+  id: string;
+  invoice_number: string;
+  job_number: string;
+  service_intake_id: string;
+  vehicle_id: string;
+  number_plate: string;
+  customer_id: string | null;
+  customer_name: string | null;
+  subtotal_ugx: number;
+  discount_ugx: number;
+  total_ugx: number;
+  paid_ugx: number;
+  outstanding_ugx: number;
+  status: string;
+  payment_status: string;
+  on_credit: boolean;
+  credit_reason: string | null;
+  cancel_reason: string | null;
+  loyalty_points_earned: number;
+  created_at: string;
+  created_by_name: string | null;
+}
+
+const INVOICE_COLUMNS = `
+  id, invoice_number, job_number, service_intake_id, vehicle_id, number_plate,
+  customer_id, customer_name, subtotal_ugx, discount_ugx, total_ugx, paid_ugx,
+  outstanding_ugx, status, payment_status, on_credit, credit_reason,
+  cancel_reason, loyalty_points_earned, created_at, created_by_name`;
+
+export async function listInvoices(search: string, status: string): Promise<InvoiceRow[]> {
+  const uid = await requireUser();
+  return queryAsUser<InvoiceRow>(
+    uid,
+    `select ${INVOICE_COLUMNS} from public.invoices
+      where ($2 = 'all' or payment_status = $2)
+        and ($1 = '' or number_plate ilike '%' || $1 || '%'
+                     or invoice_number ilike '%' || $1 || '%'
+                     or coalesce(customer_name, '') ilike '%' || $1 || '%')
+      order by created_at desc limit 50`,
+    [search.trim(), status],
+  );
+}
+
+export async function getInvoice(id: string): Promise<InvoiceRow | null> {
+  const uid = await requireUser();
+  const rows = await queryAsUser<InvoiceRow>(
+    uid, `select ${INVOICE_COLUMNS} from public.invoices where id = $1`, [id]);
+  return rows[0] ?? null;
+}
+
+export async function getInvoiceForJob(intakeId: string): Promise<InvoiceRow | null> {
+  const uid = await requireUser();
+  const rows = await queryAsUser<InvoiceRow>(
+    uid,
+    `select ${INVOICE_COLUMNS} from public.invoices
+      where service_intake_id = $1 and status <> 'cancelled'`,
+    [intakeId],
+  );
+  return rows[0] ?? null;
+}
+
+/** Invoices with money still owed, for the receivables screen. */
+export async function listCredit(): Promise<(InvoiceRow & { days_owed: number })[]> {
+  const uid = await requireUser();
+  return queryAsUser<InvoiceRow & { days_owed: number }>(
+    uid,
+    `select ${INVOICE_COLUMNS},
+            (current_date - created_at::date) as days_owed
+       from public.invoices
+      where status = 'active' and outstanding_ugx > 0
+      order by created_at limit 100`,
+  );
+}
+
+export interface InvoiceItemRow {
+  id: string;
+  service_name: string;
+  category: string;
+  price_ugx: number;
+  qualifies_for_loyalty: boolean;
+}
+
+export async function listInvoiceItems(invoiceId: string): Promise<InvoiceItemRow[]> {
+  const uid = await requireUser();
+  return queryAsUser<InvoiceItemRow>(
+    uid,
+    `select id, service_name, category, price_ugx, qualifies_for_loyalty
+       from public.invoice_items where invoice_id = $1 order by service_name`,
+    [invoiceId],
+  );
+}
+
+export interface DiscountRow {
+  id: string;
+  source: string;
+  discount_type: string;
+  discount_value: number;
+  discount_amount_ugx: number;
+  reason_code: string;
+  description: string | null;
+  approved_by: string | null;
+  status: string;
+}
+
+export async function getInvoiceDiscount(invoiceId: string): Promise<DiscountRow | null> {
+  const uid = await requireUser();
+  const rows = await queryAsUser<DiscountRow>(
+    uid,
+    `select id, source, discount_type, discount_value, discount_amount_ugx,
+            reason_code, description, approved_by, status
+       from public.discounts where invoice_id = $1 and status = 'active'`,
+    [invoiceId],
+  );
+  return rows[0] ?? null;
+}
+
+export interface PaymentRow {
+  id: string;
+  invoice_id: string;
+  invoice_number?: string;
+  number_plate?: string;
+  amount_ugx: number;
+  method: string;
+  reference: string | null;
+  status: string;
+  reversal_reason: string | null;
+  created_at: string;
+  created_by_name: string | null;
+  receipt_number?: string | null;
+}
+
+export async function listInvoicePayments(invoiceId: string): Promise<PaymentRow[]> {
+  const uid = await requireUser();
+  return queryAsUser<PaymentRow>(
+    uid,
+    `select p.id, p.invoice_id, p.amount_ugx, p.method, p.reference, p.status,
+            p.reversal_reason, p.created_at, p.created_by_name,
+            (select r.receipt_number from public.receipts r where r.payment_id = p.id)
+              as receipt_number
+       from public.payments p where p.invoice_id = $1 order by p.created_at`,
+    [invoiceId],
+  );
+}
+
+export async function listPayments(period: string, method: string): Promise<PaymentRow[]> {
+  const uid = await requireUser();
+  return queryAsUser<PaymentRow>(
+    uid,
+    `select p.id, p.invoice_id, p.amount_ugx, p.method, p.reference, p.status,
+            p.reversal_reason, p.created_at, p.created_by_name,
+            i.invoice_number, i.number_plate,
+            (select r.receipt_number from public.receipts r where r.payment_id = p.id)
+              as receipt_number
+       from public.payments p
+       join public.invoices i on i.id = p.invoice_id
+      where ($2 = 'all' or p.method = $2)
+        and p.created_at >= case $1
+              when 'today'  then date_trunc('day', now())
+              when 'week'   then now() - interval '7 days'
+              when 'month'  then now() - interval '30 days'
+              else timestamptz '1970-01-01' end
+      order by p.created_at desc limit 100`,
+    [period, method],
+  );
+}
+
+export interface ReceiptRow {
+  id: string;
+  receipt_number: string;
+  payment_id: string;
+  invoice_id: string;
+  status: string;
+  created_at: string;
+  snapshot: Record<string, unknown>;
+}
+
+export async function getReceipt(receiptNumber: string): Promise<ReceiptRow | null> {
+  const uid = await requireUser();
+  const rows = await queryAsUser<ReceiptRow>(
+    uid,
+    `select id, receipt_number, payment_id, invoice_id, status, created_at, snapshot
+       from public.receipts where receipt_number = $1`,
+    [receiptNumber],
+  );
+  return rows[0] ?? null;
+}
+
+export async function listReceipts(): Promise<ReceiptRow[]> {
+  const uid = await requireUser();
+  return queryAsUser<ReceiptRow>(
+    uid,
+    `select id, receipt_number, payment_id, invoice_id, status, created_at, snapshot
+       from public.receipts order by created_at desc limit 50`,
+  );
+}
+
+export interface PaymentAccountRow {
+  id: string;
+  code: string;
+  name: string;
+  type: string;
+  payment_method: string | null;
+}
+
+export async function listPaymentAccounts(): Promise<PaymentAccountRow[]> {
+  const uid = await requireUser();
+  return queryAsUser<PaymentAccountRow>(
+    uid, `select id, code, name, type, payment_method from public.payment_accounts order by name`);
+}
+
+export interface VehicleLoyalty {
+  points_balance: number;
+  lifetime_points: number;
+  rewards_unlocked: number;
+  rewards_redeemed: number;
+  reward_available: boolean;
+  reward_percent: number;
+  reward_threshold: number;
+  points_to_next: number;
+}
+
+export async function getVehicleLoyalty(vehicleId: string): Promise<VehicleLoyalty | null> {
+  const uid = await requireUser();
+  const rows = await queryAsUser<VehicleLoyalty>(
+    uid, `select * from app.vehicle_loyalty($1)`, [vehicleId]);
+  return rows[0] ?? null;
+}
+
+export interface LoyaltyEntry {
+  id: string;
+  type: string;
+  points: number;
+  balance_before: number;
+  balance_after: number;
+  reason: string | null;
+  reversed_by_id: string | null;
+  created_at: string;
+}
+
+export async function listLoyaltyLedger(vehicleId: string): Promise<LoyaltyEntry[]> {
+  const uid = await requireUser();
+  return queryAsUser<LoyaltyEntry>(
+    uid,
+    `select id, type, points, balance_before, balance_after, reason,
+            reversed_by_id, created_at
+       from public.loyalty_transactions where vehicle_id = $1
+      order by created_at desc limit 100`,
+    [vehicleId],
+  );
+}
+
+/** Vehicles with the most points, for the loyalty overview. */
+export async function listLoyaltyLeaders(): Promise<
+  { vehicle_id: string; number_plate: string; points_balance: number; reward_available: boolean }[]
+> {
+  const uid = await requireUser();
+  return queryAsUser(
+    uid,
+    `select a.vehicle_id, v.number_plate, a.points_balance,
+            exists (select 1 from public.loyalty_rewards r
+                     where r.vehicle_id = a.vehicle_id and r.status = 'available')
+              as reward_available
+       from public.loyalty_accounts a
+       join public.vehicles v on v.id = a.vehicle_id
+      where a.points_balance > 0
+      order by a.points_balance desc limit 50`,
+  );
 }

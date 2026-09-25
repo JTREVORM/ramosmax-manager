@@ -6,10 +6,16 @@ import { Card, CardBody, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { formatUgx } from '@/lib/format/money';
 import { formatDateTime } from '@/lib/format/date';
-import { getJob, listAssignableWorkers, listJobOrders } from '@/lib/server/operations';
+import {
+  getInvoiceForJob,
+  getJob,
+  listAssignableWorkers,
+  listJobOrders,
+} from '@/lib/server/operations';
 import { currentUser } from '@/lib/server/auth-service';
 import { JobOrders } from './job-orders';
 import { CancelJobForm } from './cancel-job-form';
+import { BillingSection } from './billing-section';
 import { requireAnyPermission } from '@/lib/server/guard';
 
 export const metadata: Metadata = { title: 'Job' };
@@ -24,9 +30,13 @@ export default async function JobDetailPage({ params }: { params: Promise<{ jobI
   const canAssign = user?.permissions.includes('jobs.assign') ?? false;
   const canManage = user?.permissions.includes('jobs.manage') ?? false;
 
-  const [orders, workers] = await Promise.all([
+  const canInvoice = user?.permissions.includes('invoices.create') ?? false;
+  const canSeeInvoice = user?.permissions.includes('invoices.view') ?? false;
+
+  const [orders, workers, invoice] = await Promise.all([
     listJobOrders(jobId),
     canAssign ? listAssignableWorkers() : Promise.resolve([]),
+    canSeeInvoice ? getInvoiceForJob(jobId) : Promise.resolve(null),
   ]);
 
   const total = job.selected_services.reduce((sum, s) => sum + Number(s.priceUgx), 0);
@@ -108,16 +118,12 @@ export default async function JobDetailPage({ params }: { params: Promise<{ jobI
         canManage={canManage}
       />
 
-      {job.status === 'completed' && (
-        <Card className="bg-success-bg">
-          <CardBody>
-            <p className="text-success text-sm font-medium">This job is ready to invoice.</p>
-            <p className="text-success mt-1 text-sm opacity-90">
-              Invoicing arrives in the next phase of the migration.
-            </p>
-          </CardBody>
-        </Card>
-      )}
+      <BillingSection
+        jobId={jobId}
+        jobStatus={job.status}
+        invoice={invoice}
+        canCreate={canInvoice}
+      />
 
       {canManage && job.status !== 'cancelled' && job.status !== 'completed' && (
         <Card>

@@ -16,8 +16,10 @@
  */
 import { chromium } from 'playwright';
 import { mkdirSync } from 'node:fs';
+import pg from 'pg';
 
 const BASE = process.env.BASE_URL ?? 'http://127.0.0.1:3100';
+const DB = process.env.DATABASE_URL ?? 'postgres://postgres:devonly@127.0.0.1:5432/ramosmax_dev';
 const OUT = process.env.SHOT_DIR ?? '.responsive';
 
 const VIEWPORTS = [
@@ -167,6 +169,151 @@ async function checkOperations(page, viewport) {
   check((await pageOverflow(page)) <= 0, 'the customer form has no horizontal scroll');
 }
 
+/**
+ * An invoice with money still owing, so the payment panel can be measured at
+ * every breakpoint. Reuses one if the database already has it; otherwise it
+ * drives the same RPCs the application does, as the seeded manager and worker,
+ * so this script does not depend on another script having run first.
+ */
+async function unpaidInvoice(db) {
+  const MANAGER = '00000000-0000-4000-8000-000000000002';
+  const WORKER = '00000000-0000-4000-8000-000000000004';
+
+  const asUser = async (uid, sql, params = []) => {
+    await db.query('begin');
+    try {
+      await db.query(`select set_config('request.jwt.claims', $1, true)`, [
+        JSON.stringify({ sub: uid, role: 'authenticated' }),
+      ]);
+      await db.query('set local role authenticated');
+      const result = await db.query(sql, params);
+      await db.query('commit');
+      return result;
+    } catch (e) {
+      await db.query('rollback');
+      throw e;
+    }
+  };
+
+  const { rows: open } = await db.query(
+    `select id from public.invoices
+      where status = 'active' and outstanding_ugx > 0 order by created_at limit 1`,
+  );
+  if (open.length > 0) return open[0].id;
+
+  const plate = `URS ${Math.floor(Math.random() * 900 + 100)}Z`;
+  const customer = (
+    await asUser(MANAGER, `select app.create_customer($1, $2) as id`, [
+      'Responsive Fixture Customer',
+      `+2567729903${Math.floor(Math.random() * 90 + 10)}`,
+    ])
+  ).rows[0].id;
+  const vehicle = (
+    await asUser(MANAGER, `select app.create_vehicle($1, $2, $3, $4, null, null, $5) as id`, [
+      plate, 'Vitz', 'Blue', 'Toyota', customer,
+    ])
+  ).rows[0].id;
+  const service = (
+    await db.query(`select id from public.services where name = 'Body Wash'`)
+  ).rows[0].id;
+  const job = (
+    await asUser(MANAGER, `select app.create_service_intake($1, $2) as id`, [vehicle, [service]])
+  ).rows[0].id;
+
+  const { rows: orders } = await db.query(
+    `select id from public.worker_orders where service_intake_id = $1`,
+    [job],
+  );
+  for (const order of orders) {
+    await asUser(MANAGER, `select app.assign_worker_order($1, $2)`, [order.id, WORKER]);
+    for (const action of ['accept', 'start', 'complete']) {
+      await asUser(WORKER, `select app.update_worker_order_status($1, $2)`, [order.id, action]);
+    }
+  }
+  return (await asUser(MANAGER, `select app.create_invoice($1) as id`, [job])).rows[0].id;
+}
+
+/**
+ * The Phase D money screens at every breakpoint. These carry the densest data
+ * in the system — amounts, statuses, dates and actions — so the card/table
+ * switch and the absence of sideways scroll matter most here.
+ *
+ * It expects the Phase D workflow script to have run against this database, so
+ * there is a real invoice to open rather than an empty state.
+ */
+async function checkBilling(page, viewport, invoiceId) {
+  const screens = [
+    ['/invoices', 'Invoices'],
+    ['/payments', 'Payments'],
+    ['/receipts', 'Receipts'],
+    ['/credit', 'Credit'],
+    ['/loyalty', 'Loyalty'],
+  ];
+
+  for (const [path, title] of screens) {
+    await page.goto(`${BASE}${path}`, { waitUntil: 'domcontentloaded' });
+    const heading = await page.getByRole('heading', { level: 1 }).first().textContent();
+    check(heading.trim() === title, `${path} renders`);
+    check((await pageOverflow(page)) <= 0, `${path} has no horizontal scroll`);
+    await page.screenshot({ path: `${OUT}/money-${viewport.name}-${path.slice(1)}.png` });
+  }
+
+  // Money tables must become cards on a phone: an amount column pushed off the
+  // right edge is how a cashier reads the wrong figure.
+  await page.goto(`${BASE}/invoices`, { waitUntil: 'domcontentloaded' });
+  const table = page.getByRole('table').first();
+  const list = page.getByRole('list', { name: 'Invoices' }).first();
+  if (viewport.width >= 768) {
+    check(await table.isVisible(), 'invoices render as a table on a wide screen');
+    check(!(await list.isVisible()), 'the invoice card list is hidden on a wide screen');
+  } else {
+    check(await list.isVisible(), 'invoices render as cards on a phone');
+    check(!(await table.isVisible()), 'the invoice table is hidden on a phone');
+  }
+
+  // Both presentations are in the DOM; only one is visible at this width.
+  const invoiceLink = page.locator('a[href^="/invoices/"]:visible').first();
+  check((await invoiceLink.count()) === 1, 'an invoice row is reachable from the list');
+
+  // The invoice with money still owing, so the payment panel is there to measure.
+  await page.goto(`${BASE}/invoices/${invoiceId}`, { waitUntil: 'domcontentloaded' });
+  check((await pageOverflow(page)) <= 0, 'the invoice detail has no horizontal scroll');
+  await page.screenshot({ path: `${OUT}/money-${viewport.name}-invoice.png`, fullPage: true });
+
+  const pay = page.getByRole('button', { name: 'Take payment' });
+  if ((await pay.count()) > 0) {
+    // 44px is a TOUCH requirement, applied by the coarse-pointer rule in
+    // globals.css. A mouse-driven desktop keeps the compact button.
+    const minimum = viewport.width < 1024 ? 44 : 32;
+    const box = await pay.first().boundingBox();
+    const height = box ? Math.round(box.height) : 0;
+    check(height >= minimum, `the payment action is ${height}px tall (>=${minimum})`);
+    await pay.first().click();
+    await page.waitForTimeout(300);
+    const amount = await page.locator('input[name="amount_ugx"]').boundingBox();
+    check(
+      amount !== null && amount.height >= 44,
+      'the amount field meets the 44px touch target at every size',
+    );
+    check((await pageOverflow(page)) <= 0, 'the open payment panel has no horizontal scroll');
+    await page.screenshot({ path: `${OUT}/money-${viewport.name}-payment.png`, fullPage: true });
+  } else {
+    check(false, 'the invoice offers a payment action');
+  }
+
+  // The receipt is the one screen a customer sees; it must read well narrow.
+  await page.goto(`${BASE}/receipts`, { waitUntil: 'domcontentloaded' });
+  const receiptLink = page.locator('a[href^="/receipts/RMX-RCP-"]:visible').first();
+  if ((await receiptLink.count()) > 0) {
+    await receiptLink.click();
+    await page.waitForURL(/\/receipts\/RMX-RCP-/, { timeout: 15_000 });
+    check((await pageOverflow(page)) <= 0, 'the receipt has no horizontal scroll');
+    await page.screenshot({ path: `${OUT}/money-${viewport.name}-receipt.png`, fullPage: true });
+  } else {
+    check(false, 'a receipt exists to open (run scripts/check-billing-e2e.mjs first)');
+  }
+}
+
 async function checkDarkMode(browser) {
   const context = await browser.newContext({
     viewport: { width: 390, height: 844 },
@@ -186,6 +333,10 @@ async function checkDarkMode(browser) {
 async function main() {
   mkdirSync(OUT, { recursive: true });
 
+  const db = new pg.Client({ connectionString: DB });
+  await db.connect();
+  const invoiceId = await unpaidInvoice(db);
+
   const browser = await chromium.launch({
     // The sandbox ships a pinned Chromium; use it rather than downloading one.
     executablePath: process.env.CHROMIUM_PATH ?? undefined,
@@ -203,12 +354,14 @@ async function main() {
     await checkSignIn(page, viewport);
     await checkShell(page, viewport);
     await checkOperations(page, viewport);
+    await checkBilling(page, viewport, invoiceId);
 
     await context.close();
   }
 
   await checkDarkMode(browser);
   await browser.close();
+  await db.end();
 
   console.log(
     failures === 0

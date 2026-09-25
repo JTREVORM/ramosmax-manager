@@ -44,7 +44,26 @@ let pool: PgPool | null = null;
 /** The shared development connection pool. Never used against Supabase. */
 export async function localPool(): Promise<PgPool> {
   if (!pool) {
-    const { Pool } = await import('pg');
+    const pg = await import('pg');
+    const { Pool } = pg;
+
+    // node-postgres hands back `bigint` as a STRING, because a 64-bit integer
+    // does not always fit a JS number. Every money column in RamosMAX is
+    // `bigint`, so left alone the application would compare `'0' === 0` (false)
+    // and silently hide the actions that depend on it. PostgREST serialises the
+    // same columns as JSON numbers, so parsing them here is also what keeps the
+    // local and Supabase paths identical.
+    //
+    // Whole shillings never approach 2^53; anything that does is a bug or a
+    // corrupted row, and must be loud rather than quietly rounded.
+    pg.types.setTypeParser(20, (value: string) => {
+      const parsed = Number(value);
+      if (!Number.isSafeInteger(parsed)) {
+        throw new Error(`Refusing to round a bigint that exceeds a safe integer: ${value}`);
+      }
+      return parsed;
+    });
+
     pool = new Pool({
       connectionString:
         process.env.DATABASE_URL ?? 'postgres://postgres:devonly@127.0.0.1:5432/ramosmax_dev',

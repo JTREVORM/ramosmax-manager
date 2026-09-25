@@ -199,3 +199,19 @@ export async function becomeClient(session: Session, uid: string | null) {
 export async function becomeOwner(session: Session) {
   await session.query('reset role');
 }
+
+/**
+ * Acts AS THE SERVER on behalf of `uid`: the identity claims are set, but the
+ * role is NOT switched to `authenticated`.
+ *
+ * This is how a server-side route calls a function that is deliberately not
+ * exposed to clients — password resets, user creation, the audit helper. Such
+ * a function still sees the real caller through auth.uid() and still applies
+ * its own permission checks; what it does not need is a client EXECUTE grant.
+ */
+export async function becomeServer(session: Session, uid: string) {
+  await session.query('reset role');
+  await session.query(
+    `set local request.jwt.claims = '${JSON.stringify({ sub: uid, role: 'authenticated' })}'`,
+  );
+}

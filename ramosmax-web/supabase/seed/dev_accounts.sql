@@ -46,8 +46,13 @@ insert into public.settings (key, value) values
   ('payroll_policy', jsonb_build_object(
       'reportingTime', '08:00', 'graceMinutes', 15,
       'dailyAllowanceUgx', 5000, 'latePolicy', 'DEDUCT')),
+  -- The key names are loyalty.js's own (DEFAULT_LOYALTY). A key the server
+  -- does not recognise is ignored and its default kept, so a misspelling here
+  -- would silently look correct.
   ('loyalty', jsonb_build_object(
-      'pointsPerWash', 20, 'rewardThreshold', 200, 'rewardPercent', 25)),
+      'pointsPerQualifyingService', 20, 'rewardThreshold', 200,
+      'rewardDiscountPercent', 25, 'pointsConsumedOnRedemption', 200,
+      'nearThresholdPoints', 160)),
   ('after_hours_policy', jsonb_build_object(
       'maxWindowHours', 12, 'maxFloatUgx', 200000,
       'paymentMethods', jsonb_build_array('cash', 'mtn', 'airtel')))

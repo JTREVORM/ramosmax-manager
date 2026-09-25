@@ -264,9 +264,13 @@ describe('a worker sees only the orders assigned to them', () => {
 
   it('sees only its own rows through my_worker_orders', async () => {
     await asAdminDb(async (db) => {
-      await twoAssignedJobs(db);
+      const { jobs } = await twoAssignedJobs(db);
       await becomeClient(db, SEED.worker);
-      const { rows } = await db.query(`select count(*)::int as n from public.my_worker_orders`);
+      // Scoped to the jobs this test created: other suites commit rows to the
+      // same development database, and this is asserting isolation, not counts.
+      const { rows } = await db.query<{ n: string }>(
+        `select count(*)::text as n from public.my_worker_orders
+          where service_intake_id = any($1::uuid[])`, [jobs]);
       expect(Number(rows[0].n)).toBe(1);
     });
   });
@@ -285,7 +289,9 @@ describe('a worker sees only the orders assigned to them', () => {
     await asAdminDb(async (db) => {
       const { jobs } = await twoAssignedJobs(db);
       await becomeClient(db, SEED.worker);
-      const { rows } = await db.query(`select id from public.service_intakes`);
+      const { rows } = await db.query<{ id: string }>(
+        `select id from public.service_intakes where id = any($1::uuid[])`, [jobs]);
+      // Its own job is visible; the other worker's job is not.
       expect(rows.map((r) => r.id)).toEqual([jobs[0]]);
     });
   });

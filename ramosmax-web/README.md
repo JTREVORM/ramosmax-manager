@@ -10,15 +10,26 @@ The Next.js + Supabase migration of the RamosMAX Automotive Care Management Syst
 Migration plan: [`../migration/RAMOSMAX_WEB_MIGRATION_PLAN.md`](../migration/RAMOSMAX_WEB_MIGRATION_PLAN.md)
 Reference version: Phase 9, commit `113219d`.
 
-## Status — Phase A (foundation) complete
+## Status — Phase D (billing and loyalty) complete
 
-| Phase | Scope                                               | State       |
-| ----- | --------------------------------------------------- | ----------- |
-| A     | Scaffold, access model, shell, DataView, tokens, CI | **done**    |
-| B     | Auth, users, roles, permissions                     | not started |
-| C–I   | Business modules                                    | not started |
-| J     | Hardening and parity suite                          | not started |
-| K     | Data migration and cutover                          | not started |
+| Phase | Scope                                                     | State       |
+| ----- | --------------------------------------------------------- | ----------- |
+| A     | Scaffold, access model, shell, DataView, tokens, CI       | **done**    |
+| B     | Auth, users, roles, permissions, RLS parity               | **done**    |
+| C     | Customers, vehicles, services, intake, jobs               | **done**    |
+| D     | Invoices, discounts, payments, receipts, credit, loyalty  | **done**    |
+| E–I   | Finance, inventory, workforce, ownership, reporting       | not started |
+| J     | Hardening and parity suite                                | not started |
+| K     | Data migration and cutover                                | not started |
+
+Phase D pulled a **slice of Phase E (Finance) forward**, because the reference
+implementation posts every customer payment to the finance ledger inside the
+same transaction as the payment itself, and requirement 5 ("there must never be
+a state where the payment exists but its required financial posting does not")
+cannot be met without it. What exists is `financial_accounts`,
+`financial_transactions` and `finance_daily_summaries`, serving customer
+payments and their reversals only. Expenses, banking, reconciliation, float and
+the Finance screens remain Phase E.
 
 ## Commands
 
@@ -41,9 +52,11 @@ npm run build && npx next start -p 3100 &
 CHROMIUM_PATH=/path/to/chromium node scripts/check-responsive.mjs
 CHROMIUM_PATH=/path/to/chromium node scripts/check-auth-e2e.mjs
 
-# Needs a FRESH database, because RamosMAX never deletes what it creates:
+# Need a FRESH database, because RamosMAX never deletes what it creates.
+# Run them in this order: the money workflow starts where the job workflow ends.
 npm run db:reset
 CHROMIUM_PATH=/path/to/chromium node scripts/check-operations-e2e.mjs
+CHROMIUM_PATH=/path/to/chromium node scripts/check-billing-e2e.mjs
 ```
 
 ## The worker / customer-phone boundary
@@ -61,6 +74,44 @@ line:
 
 `src/test/db/operations-rls.test.ts` proves all three, including direct
 attempts to join or name a customer id.
+
+## Money
+
+Every amount is a **whole UGX integer**, held in `bigint` columns whose names
+end in `_ugx`. There is no floating point anywhere in the money path, and no
+rounding the browser can influence.
+
+- **The browser sends intent, never figures.** "UGX 10,000 by MTN", "10%
+  promotional" — never a total, a balance, a discount amount or a points
+  figure. A Server Action is as untrusted as the browser here: it forwards to
+  one `SECURITY DEFINER` function and returns what the database said.
+- **Derived money is computed by the database.** `total_ugx`,
+  `outstanding_ugx` and `payment_status` are `GENERATED ALWAYS ... STORED`
+  columns. Nothing — not a route, not a migration, not a superuser session —
+  can write a total that disagrees with its parts.
+- **Percentages round half-up to the shilling**, in one place:
+  `app.percent_of(amount, percent) = (amount * percent + 50) / 100`, integer
+  division. The client preview uses the same formula so the figure a cashier
+  reads is the figure the server applies; where it could still differ
+  (a loyalty reward) the client sends what it showed and the server refuses
+  with `preview_stale` rather than applying a different amount.
+- **A payment and its ledger entry, receipt and loyalty award are one
+  transaction.** There is no state where one exists without the others.
+- **Idempotency** is a `request_id` generated once when a payment form opens
+  and reused for every retry. `app.request_keys` fingerprints the payload, so
+  the same id with the same payload returns the first result and the same id
+  with a different payload is refused.
+- **Nothing is ever deleted.** A payment is reversed, an invoice is cancelled,
+  a loyalty entry is reversed by another entry. Triggers enforce this at the
+  table level, not in application code.
+- **`bigint` is parsed into a JS number** in `src/lib/server/db.ts`.
+  node-postgres returns `bigint` as a string, which made `paid_ugx === 0` false
+  for an unpaid invoice; PostgREST serialises the same columns as JSON numbers,
+  so parsing keeps the local and Supabase paths identical. Anything beyond
+  `Number.MAX_SAFE_INTEGER` throws rather than rounding.
+- **Money display follows `Money.format()`** in the reference implementation:
+  the currency CODE and a normal space, `UGX 25,000`. `Intl.NumberFormat`'s
+  currency style would render "USh" with a non-breaking space.
 
 ## Architecture rules
 
