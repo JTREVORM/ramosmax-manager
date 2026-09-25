@@ -103,7 +103,9 @@ describe('customer → vehicle → intake → assign → work → ready to invoi
       await becomeClient(db, SEED.worker);
       // Scoped to this job: other suites commit orders for the same worker.
       const { rows: mine } = await db.query<{
-        order_number: string; status: string; number_plate: string;
+        order_number: string;
+        status: string;
+        number_plate: string;
       }>(
         `select order_number, status, number_plate from public.my_worker_orders
           where service_intake_id = $1 order by order_number`,
@@ -194,13 +196,20 @@ describe('customer → vehicle → intake → assign → work → ready to invoi
                              'reconcile_account', 'receive_purchase', 'adjust_stock')`);
       expect(phaseE).toHaveLength(6);
 
-      // The current boundary is Phase F: payroll, attendance, ownership and
-      // after-hours have no functions yet.
+      // Phase F has arrived: attendance, allowances and payroll are here.
+      const { rows: phaseF } = await db.query<{ proname: string }>(`
+        select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+         where n.nspname = 'app'
+           and p.proname in ('record_attendance', 'calculate_allowances', 'pay_allowances',
+                             'prepare_payroll', 'pay_payroll', 'create_loss_incident')`);
+      expect(phaseF).toHaveLength(6);
+
+      // The current boundary is Phase G: ownership, dividends, after-hours and
+      // cash handovers have no functions yet.
       const { rows: later } = await db.query<{ n: string }>(`
         select count(*)::text as n from pg_proc p join pg_namespace n on n.oid = p.pronamespace
          where n.nspname = 'app'
-           and (p.proname like '%payroll%' or p.proname like '%attendance%'
-                or p.proname like '%allowance%' or p.proname like '%shareholder%'
+           and (p.proname like '%shareholder%' or p.proname like '%share_%'
                 or p.proname like '%dividend%' or p.proname like '%after_hours%'
                 or p.proname like '%handover%')`);
       expect(Number(later[0].n)).toBe(0);

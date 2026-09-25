@@ -10,18 +10,19 @@ The Next.js + Supabase migration of the RamosMAX Automotive Care Management Syst
 Migration plan: [`../migration/RAMOSMAX_WEB_MIGRATION_PLAN.md`](../migration/RAMOSMAX_WEB_MIGRATION_PLAN.md)
 Reference version: Phase 9, commit `113219d`.
 
-## Status — Phase E (finance, expenses and inventory) complete
+## Status — Phase F (attendance, allowances, payroll and losses) complete
 
-| Phase | Scope                                                     | State       |
-| ----- | --------------------------------------------------------- | ----------- |
-| A     | Scaffold, access model, shell, DataView, tokens, CI       | **done**    |
-| B     | Auth, users, roles, permissions, RLS parity               | **done**    |
-| C     | Customers, vehicles, services, intake, jobs               | **done**    |
-| D     | Invoices, discounts, payments, receipts, credit, loyalty  | **done**    |
-| E     | Finance, expenses, banking, reconciliation, inventory     | **done**    |
-| F–I   | Workforce, ownership, after-hours, reporting              | not started |
-| J     | Hardening and parity suite                                | not started |
-| K     | Data migration and cutover                                | not started |
+| Phase | Scope                                                    | State       |
+| ----- | -------------------------------------------------------- | ----------- |
+| A     | Scaffold, access model, shell, DataView, tokens, CI      | **done**    |
+| B     | Auth, users, roles, permissions, RLS parity              | **done**    |
+| C     | Customers, vehicles, services, intake, jobs              | **done**    |
+| D     | Invoices, discounts, payments, receipts, credit, loyalty | **done**    |
+| E     | Finance, expenses, banking, reconciliation, inventory    | **done**    |
+| F     | Attendance, allowances, payroll, losses, deductions      | **done**    |
+| G–I   | Ownership, after-hours, reporting                        | not started |
+| J     | Hardening and parity suite                               | not started |
+| K     | Data migration and cutover                               | not started |
 
 Phase D pulled a slice of Finance forward — accounts, the ledger and the daily
 summaries — because the reference implementation posts every customer payment
@@ -32,8 +33,13 @@ now carry expense payments, stock purchases, transfers, deposits, adjustments
 and opening balances, with `financial_transaction_entries` recording what each
 transaction did to each account.
 
-**After-hours and cash handovers are deliberately NOT in Phase E.** Sessions,
-authorisation windows, float issuance, custody handovers and the
+**Phase F extended that slice again** rather than adding a third financial
+model: allowance and payroll payments post `allowance_payment` and
+`payroll_payment` entries through the same `app.post_transaction`, and the
+daily summary carries them.
+
+**After-hours and cash handovers are deliberately NOT in Phase E or F.**
+Sessions, authorisation windows, float issuance, custody handovers and the
 discrepancy-to-loss workflow get their own phase.
 
 ## Commands
@@ -67,6 +73,11 @@ CHROMIUM_PATH=/path/to/chromium node scripts/check-billing-e2e.mjs
 # moved yet. Reset again before running it, and run the responsive suite last.
 npm run db:reset
 CHROMIUM_PATH=/path/to/chromium node scripts/check-finance-e2e.mjs
+
+# Phase F asserts absolute pay, so it too needs a fresh database. The
+# responsive suite runs last, against whatever is there.
+npm run db:reset
+CHROMIUM_PATH=/path/to/chromium node scripts/check-workforce-e2e.mjs
 CHROMIUM_PATH=/path/to/chromium node scripts/check-responsive.mjs
 ```
 
@@ -163,10 +174,64 @@ transfer. `app.move_stock` plays the same role for quantities.
   DRAFT per due date and advances the schedule. It is not callable from a
   browser session.
 
+## Attendance, allowances, payroll and losses
+
+The business day is **East Africa Time**, UTC+3 with no daylight saving, and it
+is the database's `app.eat_day()` that decides it — never the browser's clock
+and never the server's time zone. `src/test/db/workforce-eat.test.ts` pins that
+down at midnight, the end of a month, the end of a year and the hours where the
+UTC date and the EAT date disagree.
+
+- **One attendance record per person per EAT day**, enforced by
+  `attendance_one_per_day unique (staff_uid, business_day)`. Two phones
+  clocking in at the same moment cannot both win.
+- **Lateness is the server's finding, from a policy SNAPSHOT.** The reporting
+  time, grace period and late threshold in force are copied onto the record.
+  Changing the policy next month never rewrites what happened last month, and a
+  correction recomputes lateness with the record's own policy.
+- **A correction is history, not a rewrite.** The original and corrected values,
+  the changed fields, the reason and the author are kept, and the record goes
+  back for verification.
+- **Being late never removes an allowance by itself.** The policy suggests
+  FULL, DEDUCT or REJECT; a person decides, with a reason, and someone holding
+  only `allowances.adjust` can propose but not approve.
+- **A salary is a version, effective from a date.** The version in force on the
+  period's last day applies, so adding a future salary cannot change a payroll
+  that has already been prepared.
+- **Payroll is `prepare → review → Administrator approval → payment → lock`,**
+  one payroll per frequency and period at the database level. Nothing in
+  `create_payroll`, `prepare_payroll`, `update_payroll_status`, `lock_payroll`
+  or `cancel_payroll` accepts a figure: the browser can ask for the period to
+  be worked out and nothing else.
+- **Net pay is never negative and always whole shillings.** Deductions are
+  capped at `maxDeductionPercentOfGross`, and each takes the least of its
+  instalment, what remains, and what the incident still has outstanding.
+- **Only the payment applies anything.** Preparing a payroll moves no money,
+  applies no deduction and recovers no loss. `app.pay_payroll` re-checks every
+  allowance, deduction and incident under a row lock, refuses a stale payroll,
+  and then posts one ledger entry, applies the deductions, updates the
+  incidents and makes the payslips visible — in one transaction with one
+  request key.
+- **A payslip is private.** A staff member sees their own, and only once the
+  payroll has been paid; never a colleague's, by id, by listing or by
+  aggregate. `reports.payroll.view` gives period TOTALS and no individual's
+  pay, salary, deduction or payslip — so a manager with workforce reports gains
+  nothing about any one person.
+- **A reported loss deducts nothing**, and the person it concerns does not see
+  it until it has been decided. Only an approved recovery may become a
+  deduction, only a scheduled deduction reaches a payroll, and only a paid
+  payroll recovers anything.
+- **Staff pay is reversed through its own workflow.** The generic
+  `app.reverse_financial_transaction` refuses an `allowance_payment` or
+  `payroll_payment` and names `app.reverse_allowance_payment` or
+  `app.reverse_payroll_payment` instead.
+- **A notification carries an identifier only** — a reference number, never an
+  amount, a salary or a deduction.
+
 ## The allow-list of callable functions
 
-`0014` and `0020` revoke EXECUTE from `PUBLIC` across the `app` schema and
-grant an explicit list. `src/test/db/rpc-exposure.test.ts` fails if a function
+`0014`, `0020` and `0031` revoke EXECUTE from `PUBLIC` across the `app` schema
+and grant an explicit list. `src/test/db/rpc-exposure.test.ts` fails if a function
 becomes callable from a browser session without being on that list, and if
 anything on the list is not actually granted — so an internal helper added
 later cannot quietly become part of the API.
@@ -200,6 +265,7 @@ scripts/
   generate-permission-catalogue.mjs   reference implementation -> TS + SQL
   check-sql.mjs                       parses migrations with the PostgreSQL grammar
   check-responsive.mjs                breakpoint / a11y / overflow checks
+  check-workforce-e2e.mjs             the Phase F workflows, in a real browser
 supabase/local/
   00_platform_bootstrap.sql           LOCAL ONLY: emulates the Supabase platform
 supabase/migrations/
@@ -212,6 +278,18 @@ supabase/migrations/
   0007_operations_functions.sql       plates, customer/vehicle/service rules
   0008_jobs_functions.sql             intake, assignment, the status machine
   0009_operations_rls.sql             RLS, the vehicle directory, plate search
+  0010–0014                           billing, loyalty, RLS, the EXECUTE allow-list
+  0015–0021                           finance, expenses, inventory, reference numbers
+  0022_workforce_schema.sql           attendance, allowances, salary, payroll, losses
+  0023_workforce_policy.sql           the EAT business day, the payroll policy
+  0024_attendance_functions.sql       recording, verification, corrections
+  0025_allowance_functions.sql        calculation, FULL/DEDUCT/REJECT, payment
+  0026_workforce_ledger.sql           staff pay in the Phase E ledger
+  0027_payroll_functions.sql          salary versions, the payroll calculation
+  0028_payroll_payment.sql            payment, reversal, locking
+  0029_loss_functions.sql             loss incidents and salary deductions
+  0030_workforce_rls.sql              who may read a payslip, a salary, an incident
+  0031_function_privileges_f.sql      the EXECUTE allow-list, extended
 supabase/seed/
   dev_accounts.sql                    DEVELOPMENT ONLY: six fake test accounts
   dev_operations.sql                  DEVELOPMENT ONLY: catalogue and test vehicles

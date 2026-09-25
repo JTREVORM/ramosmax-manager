@@ -210,12 +210,15 @@ async function unpaidInvoice(db) {
   ).rows[0].id;
   const vehicle = (
     await asUser(MANAGER, `select app.create_vehicle($1, $2, $3, $4, null, null, $5) as id`, [
-      plate, 'Vitz', 'Blue', 'Toyota', customer,
+      plate,
+      'Vitz',
+      'Blue',
+      'Toyota',
+      customer,
     ])
   ).rows[0].id;
-  const service = (
-    await db.query(`select id from public.services where name = 'Body Wash'`)
-  ).rows[0].id;
+  const service = (await db.query(`select id from public.services where name = 'Body Wash'`))
+    .rows[0].id;
   const job = (
     await asUser(MANAGER, `select app.create_service_intake($1, $2) as id`, [vehicle, [service]])
   ).rows[0].id;
@@ -338,22 +341,35 @@ async function moneyFixtures(db) {
   };
   const unique = Math.random().toString(36).slice(2, 8);
 
-  let expense = (await db.query(`select id from public.expenses order by created_at limit 1`)).rows[0];
+  let expense = (await db.query(`select id from public.expenses order by created_at limit 1`))
+    .rows[0];
   if (!expense) {
-    expense = (await asUser(MANAGER,
-      `select expense_id as id from app.create_expense('utilities', $1, 250000, current_date, $2,
+    expense = (
+      await asUser(
+        MANAGER,
+        `select expense_id as id from app.create_expense('utilities', $1, 250000, current_date, $2,
                                                         'A Vendor', null, null, null, true)`,
-      [`Responsive fixture ${unique}`, `resp-exp-${unique}`])).rows[0];
+        [`Responsive fixture ${unique}`, `resp-exp-${unique}`],
+      )
+    ).rows[0];
   }
 
-  let item = (await db.query(`select id from public.inventory_items order by created_at limit 1`)).rows[0];
+  let item = (await db.query(`select id from public.inventory_items order by created_at limit 1`))
+    .rows[0];
   if (!item) {
-    const supplier = (await asUser(MANAGER,
-      `select supplier_id as id from app.create_supplier($1)`, [`Responsive Supplier ${unique}`])).rows[0];
-    item = (await asUser(MANAGER,
-      `select item_id as id from app.create_inventory_item($1, 'chemicals', 'litre', 2, 4, null,
+    const supplier = (
+      await asUser(MANAGER, `select supplier_id as id from app.create_supplier($1)`, [
+        `Responsive Supplier ${unique}`,
+      ])
+    ).rows[0];
+    item = (
+      await asUser(
+        MANAGER,
+        `select item_id as id from app.create_inventory_item($1, 'chemicals', 'litre', 2, 4, null,
                                                             true, $2, 12000, null, 25)`,
-      [`Responsive Item ${unique}`, supplier.id])).rows[0];
+        [`Responsive Item ${unique}`, supplier.id],
+      )
+    ).rows[0];
   }
 
   return { expense: expense.id, item: item.id };
@@ -398,7 +414,10 @@ async function checkPhaseE(page, viewport, fixtures) {
   ]) {
     await page.goto(`${BASE}${path}`, { waitUntil: 'domcontentloaded' });
     check((await pageOverflow(page)) <= 0, `${label} has no horizontal scroll`);
-    await page.screenshot({ path: `${OUT}/phaseE-${viewport.name}-${label.split(' ')[1]}.png`, fullPage: true });
+    await page.screenshot({
+      path: `${OUT}/phaseE-${viewport.name}-${label.split(' ')[1]}.png`,
+      fullPage: true,
+    });
   }
 
   // The ledger is the widest table in the system: cards on a phone, table above.
@@ -416,7 +435,10 @@ async function checkPhaseE(page, viewport, fixtures) {
   // A money form on a phone must still be usable.
   await page.goto(`${BASE}/finance/transfers`, { waitUntil: 'domcontentloaded' });
   const amount = await page.locator('input[name="amount_ugx"]').boundingBox();
-  check(amount !== null && amount.height >= 44, 'the transfer amount field meets the 44px touch target');
+  check(
+    amount !== null && amount.height >= 44,
+    'the transfer amount field meets the 44px touch target',
+  );
   const submit = await page.getByRole('button', { name: 'Transfer' }).boundingBox();
   check(submit !== null && submit.height >= 44, 'the transfer submit meets the 44px touch target');
   check((await pageOverflow(page)) <= 0, 'the transfer form has no horizontal scroll');
@@ -439,6 +461,160 @@ async function checkDarkMode(browser) {
   await context.close();
 }
 
+/**
+ * Workforce fixtures: a salary, an attendance record with its allowance, a
+ * payroll and a loss incident — created through the real functions, as the
+ * people who may.
+ */
+async function workforceFixtures(db) {
+  const ADMIN = '00000000-0000-4000-8000-000000000001';
+  const MANAGER = '00000000-0000-4000-8000-000000000002';
+  const WORKER = '00000000-0000-4000-8000-000000000004';
+  const asUser = async (uid, sql, params = []) => {
+    await db.query('begin');
+    try {
+      await db.query(`select set_config('request.jwt.claims', $1, true)`, [
+        JSON.stringify({ sub: uid, role: 'authenticated' }),
+      ]);
+      await db.query('set local role authenticated');
+      const result = await db.query(sql, params);
+      await db.query('commit');
+      return result;
+    } catch (e) {
+      await db.query('rollback');
+      throw e;
+    }
+  };
+  const unique = Math.random().toString(36).slice(2, 8);
+  const first = async (sql, params) => (await db.query(sql, params)).rows[0];
+
+  const when = await first(`
+    select g.d::date::text as day, extract(year from g.d)::int as year,
+           extract(month from g.d)::int as month
+      from generate_series(date_trunc('month', app.eat_day())::date, app.eat_day() - 1,
+                           interval '1 day') g(d)
+     where extract(isodow from g.d) between 1 and 6
+     order by g.d desc limit 1`);
+
+  if (
+    !(await first(`select staff_uid from public.salary_profiles where staff_uid = $1`, [WORKER]))
+  ) {
+    await asUser(ADMIN, `select * from app.set_salary_profile($1, 600000, '2020-01-01')`, [WORKER]);
+  }
+
+  let attendance = await first(
+    `select id from public.attendance where staff_uid = $1 order by business_day desc limit 1`,
+    [WORKER],
+  );
+  if (!attendance) {
+    attendance = (
+      await asUser(
+        MANAGER,
+        `select attendance_id as id from app.record_attendance($1, 'present', $2::date,
+         (($2::date + time '08:45') at time zone 'Africa/Kampala'))`,
+        [WORKER, when.day],
+      )
+    ).rows[0];
+    await asUser(MANAGER, `select app.verify_attendance(array[$1]::uuid[], 'approve')`, [
+      attendance.id,
+    ]);
+    await asUser(MANAGER, `select * from app.calculate_allowances($1::date)`, [when.day]);
+  }
+
+  let payroll = await first(`select id from public.payroll order by created_at limit 1`);
+  if (!payroll) {
+    payroll = (
+      await asUser(MANAGER, `select payroll_id as id from app.create_payroll('monthly', $1, $2)`, [
+        when.year,
+        when.month,
+      ])
+    ).rows[0];
+    await asUser(MANAGER, `select * from app.prepare_payroll($1)`, [payroll.id]);
+  }
+
+  let incident = await first(`select id from public.loss_incidents order by created_at limit 1`);
+  if (!incident) {
+    incident = (
+      await asUser(
+        MANAGER,
+        `select incident_id as id from app.create_loss_incident('damaged_equipment', 300000,
+         'Responsive fixture', $1, $2)`,
+        [`resp-loss-${unique}`, WORKER],
+      )
+    ).rows[0];
+  }
+
+  const deduction = await first(`select id from public.salary_deductions limit 1`);
+
+  return {
+    attendance: attendance.id,
+    payroll: payroll.id,
+    incident: incident.id,
+    deduction: deduction?.id ?? null,
+    staff: WORKER,
+  };
+}
+
+/**
+ * The Phase F screens at every breakpoint. Attendance and allowances are used
+ * on the forecourt, on a phone, by the people they are about.
+ */
+async function checkPhaseF(page, viewport, fixtures) {
+  const screens = [
+    ['/attendance', 'Attendance'],
+    ['/attendance?view=verify', 'Attendance'],
+    ['/allowances', 'Allowances & pay'],
+    ['/allowances?view=unpaid', 'Allowances & pay'],
+    ['/allowances?view=mine', 'Allowances & pay'],
+    ['/payroll', 'Payroll'],
+    ['/payroll?tab=salaries', 'Payroll'],
+    ['/payroll?tab=deductions', 'Payroll'],
+    ['/payroll?tab=policy', 'Payroll'],
+    ['/payroll?tab=reports', 'Payroll'],
+    ['/losses', 'Loss incidents'],
+  ];
+
+  for (const [path, title] of screens) {
+    await page.goto(`${BASE}${path}`, { waitUntil: 'domcontentloaded' });
+    const heading = await page.getByRole('heading', { level: 1 }).first().textContent();
+    check(heading.trim() === title, `${path} renders`);
+    check((await pageOverflow(page)) <= 0, `${path} has no horizontal scroll`);
+  }
+
+  for (const [path, label] of [
+    [`/attendance/${fixtures.attendance}`, 'attendance-detail'],
+    [`/payroll/run/${fixtures.payroll}`, 'payroll-run'],
+    [`/payroll/salary/${fixtures.staff}`, 'salary-history'],
+    [`/losses/${fixtures.incident}`, 'loss-detail'],
+    ...(fixtures.deduction ? [[`/payroll/deduction/${fixtures.deduction}`, 'deduction']] : []),
+  ]) {
+    await page.goto(`${BASE}${path}`, { waitUntil: 'domcontentloaded' });
+    check((await pageOverflow(page)) <= 0, `the ${label} screen has no horizontal scroll`);
+    await page.screenshot({ path: `${OUT}/phaseF-${viewport.name}-${label}.png`, fullPage: true });
+  }
+
+  // A payroll run is the densest workforce table: cards on a phone, table above.
+  await page.goto(`${BASE}/payroll/run/${fixtures.payroll}`, { waitUntil: 'domcontentloaded' });
+  const table = page.getByRole('table').first();
+  const list = page.getByRole('list', { name: 'Payslips' }).first();
+  if (viewport.width >= 768) {
+    check(await table.isVisible(), 'the payslips are a table on a wide screen');
+    check(!(await list.isVisible()), 'the payslip card list is hidden on a wide screen');
+  } else {
+    check(await list.isVisible(), 'the payslips render as cards on a phone');
+    check(!(await table.isVisible()), 'the payslip table is hidden on a phone');
+  }
+
+  // Clocking in must be a big, obvious target on a phone.
+  await page.goto(`${BASE}/attendance`, { waitUntil: 'domcontentloaded' });
+  const clock = await page
+    .getByRole('button', { name: /^Clock (in|out)$/ })
+    .first()
+    .boundingBox();
+  check(clock !== null && clock.height >= 44, 'the clock-in button meets the 44px touch target');
+  await page.screenshot({ path: `${OUT}/phaseF-${viewport.name}-attendance.png`, fullPage: true });
+}
+
 async function main() {
   mkdirSync(OUT, { recursive: true });
 
@@ -446,6 +622,7 @@ async function main() {
   await db.connect();
   const invoiceId = await unpaidInvoice(db);
   const moneyIds = await moneyFixtures(db);
+  const workforceIds = await workforceFixtures(db);
 
   const browser = await chromium.launch({
     // The sandbox ships a pinned Chromium; use it rather than downloading one.
@@ -466,6 +643,7 @@ async function main() {
     await checkOperations(page, viewport);
     await checkBilling(page, viewport, invoiceId);
     await checkPhaseE(page, viewport, moneyIds);
+    await checkPhaseF(page, viewport, workforceIds);
 
     await context.close();
   }
