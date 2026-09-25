@@ -281,16 +281,21 @@ async function checkBilling(page, viewport, invoiceId) {
   // The invoice with money still owing, so the payment panel is there to measure.
   await page.goto(`${BASE}/invoices/${invoiceId}`, { waitUntil: 'domcontentloaded' });
   check((await pageOverflow(page)) <= 0, 'the invoice detail has no horizontal scroll');
-  await page.screenshot({ path: `${OUT}/money-${viewport.name}-invoice.png`, fullPage: true });
 
   const pay = page.getByRole('button', { name: 'Take payment' });
   if ((await pay.count()) > 0) {
     // 44px is a TOUCH requirement, applied by the coarse-pointer rule in
     // globals.css. A mouse-driven desktop keeps the compact button.
+    //
+    // Measure BEFORE any full-page screenshot: capturing a full page resizes
+    // the viewport through the DevTools protocol, which drops Chromium's touch
+    // emulation until the next navigation. `pointer: coarse` then stops
+    // matching and every touch target measures at its mouse size.
     const minimum = viewport.width < 1024 ? 44 : 32;
     const box = await pay.first().boundingBox();
     const height = box ? Math.round(box.height) : 0;
     check(height >= minimum, `the payment action is ${height}px tall (>=${minimum})`);
+    await page.screenshot({ path: `${OUT}/money-${viewport.name}-invoice.png`, fullPage: true });
     await pay.first().click();
     await page.waitForTimeout(300);
     const amount = await page.locator('input[name="amount_ugx"]').boundingBox();
@@ -302,6 +307,7 @@ async function checkBilling(page, viewport, invoiceId) {
     await page.screenshot({ path: `${OUT}/money-${viewport.name}-payment.png`, fullPage: true });
   } else {
     check(false, 'the invoice offers a payment action');
+    await page.screenshot({ path: `${OUT}/money-${viewport.name}-invoice.png`, fullPage: true });
   }
 
   // The receipt is the one screen a customer sees; it must read well narrow.
@@ -521,7 +527,12 @@ async function workforceFixtures(db) {
     await asUser(MANAGER, `select * from app.calculate_allowances($1::date)`, [when.day]);
   }
 
-  let payroll = await first(`select id from public.payroll order by created_at limit 1`);
+  // A payroll WITH payslips: the database suites commit empty draft runs, and
+  // an empty one would make the card/table check meaningless.
+  let payroll = await first(`
+    select p.id from public.payroll p
+     where exists (select 1 from public.payroll_items i where i.payroll_id = p.id)
+     order by p.created_at limit 1`);
   if (!payroll) {
     payroll = (
       await asUser(MANAGER, `select payroll_id as id from app.create_payroll('monthly', $1, $2)`, [
@@ -615,6 +626,145 @@ async function checkPhaseF(page, viewport, fixtures) {
   await page.screenshot({ path: `${OUT}/phaseF-${viewport.name}-attendance.png`, fullPage: true });
 }
 
+
+/**
+ * Ownership fixtures.
+ *
+ * Reused when they already exist, so a second run does not lock a later record
+ * date and shut the share ledger. Shares are issued four days back and the
+ * dividend's record date is three days back, which leaves today open for the
+ * end-to-end script to issue against.
+ */
+async function ownershipFixtures(db) {
+  const ADMIN = '00000000-0000-4000-8000-000000000001';
+  const asAdmin = async (sql, params = []) => {
+    await db.query('begin');
+    try {
+      await db.query(`select set_config('request.jwt.claims', $1, true)`, [
+        JSON.stringify({ sub: ADMIN, role: 'authenticated' }),
+      ]);
+      await db.query('set local role authenticated');
+      const result = await db.query(sql, params);
+      await db.query('commit');
+      return result;
+    } catch (e) {
+      await db.query('rollback');
+      throw e;
+    }
+  };
+  const unique = Math.random().toString(36).slice(2, 8);
+  const first = async (sql, params) => (await db.query(sql, params)).rows[0];
+
+  let klass = await first(`select id from public.share_classes where active order by code limit 1`);
+  if (!klass) {
+    await asAdmin(`select app.create_share_class('ORDINARY', 'Ordinary shares', 100000)`);
+    klass = await first(`select id from public.share_classes where code = 'ORDINARY'`);
+  }
+
+  let shareholder = await first(
+    `select id from public.shareholders where status = 'active' order by shareholder_number limit 1`,
+  );
+  if (!shareholder) {
+    shareholder = (
+      await asAdmin(
+        `select shareholder_id as id from app.create_shareholder('Responsive Fixture', $1,
+           '0772900001', null, 'Kampala')`,
+        [`resp-sh-${unique}`],
+      )
+    ).rows[0];
+  }
+
+  let transaction = await first(
+    `select id from public.share_transactions order by created_at limit 1`,
+  );
+  if (!transaction) {
+    const account = await first(
+      `select id from public.financial_accounts where active order by created_at limit 1`,
+    );
+    transaction = (
+      await asAdmin(
+        `select transaction_id as id from app.issue_shares($1, $2, 250, $3,
+           (app.eat_day() - 4)::date, 'account', null, $4)`,
+        [shareholder.id, klass.id, `resp-issue-${unique}`, account?.id ?? null],
+      )
+    ).rows[0];
+    const pending = await first(`select status from public.share_transactions where id = $1`, [
+      transaction.id,
+    ]);
+    if (pending.status === 'pending_approval') {
+      await asAdmin(`select * from app.decide_share_transaction($1, 'approve')`, [transaction.id]);
+    }
+  }
+
+  let dividend = await first(
+    `select id from public.dividends where status <> 'cancelled' order by created_at limit 1`,
+  );
+  if (!dividend) {
+    dividend = (
+      await asAdmin(
+        `select dividend_id as id from app.create_dividend('Responsive', (app.eat_day() - 3)::date,
+           $1, 'pool', 1000000)`,
+        [`resp-div-${unique}`],
+      )
+    ).rows[0];
+    await asAdmin(`select * from app.calculate_dividend($1)`, [dividend.id]);
+  }
+
+  return { shareholder: shareholder.id, transaction: transaction.id, dividend: dividend.id };
+}
+
+/**
+ * The ownership screens.
+ *
+ * A register, a ledger and a dividend run are the widest tables in the product,
+ * and they are read on a phone as often as anywhere else.
+ */
+async function checkOwnership(page, viewport, fixtures) {
+  const screens = [
+    ['/shareholders', 'Shareholders'],
+    ['/shareholders?tab=people', 'Shareholders'],
+    ['/shareholders?tab=reports', 'Shareholders'],
+    ['/shares', 'Shares'],
+    ['/shares?tab=classes', 'Shares'],
+    ['/shares?tab=contributions', 'Shares'],
+    ['/shares?tab=policy', 'Shares'],
+    ['/dividends', 'Dividends'],
+    ['/dividends?status=draft', 'Dividends'],
+  ];
+
+  for (const [path, title] of screens) {
+    await page.goto(`${BASE}${path}`, { waitUntil: 'domcontentloaded' });
+    const heading = await page.getByRole('heading', { level: 1 }).first().textContent();
+    check(heading.trim() === title, `${path} renders`);
+    check((await pageOverflow(page)) <= 0, `${path} has no horizontal scroll`);
+  }
+
+  for (const [path, label] of [
+    [`/shareholders/${fixtures.shareholder}`, 'shareholder-detail'],
+    [`/shares/txn/${fixtures.transaction}`, 'share-transaction'],
+    [`/dividends/${fixtures.dividend}`, 'dividend-run'],
+  ]) {
+    await page.goto(`${BASE}${path}`, { waitUntil: 'domcontentloaded' });
+    check((await pageOverflow(page)) <= 0, `the ${label} screen has no horizontal scroll`);
+    await page.screenshot({ path: `${OUT}/phaseG-${viewport.name}-${label}.png`, fullPage: true });
+  }
+
+  // The allocation review is the densest ownership table: cards on a phone.
+  await page.goto(`${BASE}/dividends/${fixtures.dividend}`, { waitUntil: 'domcontentloaded' });
+  const table = page.getByRole('table').first();
+  const list = page.getByRole('list', { name: 'Dividend allocations' }).first();
+  if (viewport.width >= 768) {
+    check(await table.isVisible(), 'the allocations are a table on a wide screen');
+    check(!(await list.isVisible()), 'the allocation card list is hidden on a wide screen');
+  } else {
+    check(await list.isVisible(), 'the allocations render as cards on a phone');
+    check(!(await table.isVisible()), 'the allocation table is hidden on a phone');
+  }
+
+  await page.goto(`${BASE}/shareholders`, { waitUntil: 'domcontentloaded' });
+  await page.screenshot({ path: `${OUT}/phaseG-${viewport.name}-register.png`, fullPage: true });
+}
+
 async function main() {
   mkdirSync(OUT, { recursive: true });
 
@@ -623,6 +773,7 @@ async function main() {
   const invoiceId = await unpaidInvoice(db);
   const moneyIds = await moneyFixtures(db);
   const workforceIds = await workforceFixtures(db);
+  const ownershipIds = await ownershipFixtures(db);
 
   const browser = await chromium.launch({
     // The sandbox ships a pinned Chromium; use it rather than downloading one.
@@ -644,6 +795,7 @@ async function main() {
     await checkBilling(page, viewport, invoiceId);
     await checkPhaseE(page, viewport, moneyIds);
     await checkPhaseF(page, viewport, workforceIds);
+    await checkOwnership(page, viewport, ownershipIds);
 
     await context.close();
   }

@@ -225,12 +225,12 @@ describe('shares: second-person approval', () => {
 
   it('refuses the requester’s own approval', async () => {
     await asAdminDb(async (db) => {
-      const { account, john } = await scene(db);
+      const { account, john, classId } = await scene(db);
       const requester = await makeUser(db, {
         role: 'manager', permissions: ['shares.issue', 'shares.approve', 'shares.view'],
       });
       const result = await issue(db, {
-        shareholder: john, shares: 100, account, amount: 10_000_000, by: requester,
+        shareholder: john, classId, shares: 100, account, amount: 10_000_000, by: requester,
       });
       await becomeClient(db, requester);
       expect(await db.expectError(
@@ -386,7 +386,8 @@ describe('shares: transfers and adjustments', () => {
       const { rows: days } = await db.query<{ recent: string; older: string }>(
         `select (app.eat_day() - 5)::text as recent, (app.eat_day() - 20)::text as older`);
       await issue(db, {
-        shareholder: john, shares: 100, account, amount: 10_000_000, effective: days[0].recent,
+        shareholder: john, classId, shares: 100, account, amount: 10_000_000,
+        effective: days[0].recent,
       });
       await becomeClient(db, SEED.admin);
       expect(await db.expectError(
