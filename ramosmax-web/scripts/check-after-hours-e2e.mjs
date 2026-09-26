@@ -476,6 +476,31 @@ console.log('\n  offline: a session is refused outright, never queued');
   await context.setOffline(false);
 }
 
+// ---------------------------------------------------------------------------
+console.log('\n  supervisor: ending the authorisation puts everything back');
+{
+  // This also leaves the seeded worker as this script found them. A live
+  // after-hours grant on a shared account would make every permission
+  // boundary elsewhere read differently, which is exactly the kind of quiet
+  // coupling this project refuses to leave lying around.
+  const { rows: live } = await db.query(
+    `select id from public.after_hours_access
+      where staff_uid = $1 and revoked_at is null and expires_at > now()`, [WORKER]);
+  for (const row of live) {
+    await asUser(ADMIN, `select app.revoke_after_hours($1, 'End of the exercise')`, [row.id]);
+  }
+  check(live.length > 0, `${live.length} authorisation(s) were still live to end`);
+
+  const left = await one(
+    `select count(*)::int as n from public.temporary_grants
+      where user_id = $1 and revoked_at is null and expires_at > now()`, [WORKER]);
+  check(left.n === 0, 'revoking takes every grant it carried with it');
+
+  const after = (await one(`select app.effective_permissions($1) as p`, [WORKER])).p;
+  check(!after.includes('after_hours.operate'), 'the worker is an ordinary worker again');
+  check(!after.includes('invoices.create'), 'and may no longer raise an invoice');
+}
+
 await manager.context.close();
 await admin.context.close();
 await worker.context.close();

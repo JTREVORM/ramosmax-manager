@@ -244,8 +244,7 @@ console.log('\n  5. the pooler does not break the functions');
 // ---------------------------------------------------------------------------
 console.log('\n  6. the scheduled work can be reached');
 {
-  const { data: sweep, error: sweepError } = await service.schema('app')
-    .rpc('sweep_after_hours');
+  const { error: sweepError } = await service.schema('app').rpc('sweep_after_hours');
   check(!sweepError, 'the after-hours sweep can be run by the service role', sweepError?.message);
 
   const { error: deliverError } = await service.schema('app').rpc('deliver_events', {

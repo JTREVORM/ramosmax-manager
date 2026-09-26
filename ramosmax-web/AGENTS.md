@@ -36,3 +36,41 @@ Notes that matter in this repository, beyond the Next.js guidance above:
 The service-role key bypasses RLS. It is used only by `serviceDb()` in
 `src/lib/server/db.ts`, for the notification delivery run, and never anywhere
 a browser can reach.
+
+## Running the checks
+
+There are two harnesses and **they do not share a database**. Each starts from
+`npm run db:reset`.
+
+```bash
+npm run verify                       # generate, parse SQL, lint, typecheck, unit tests
+npm run db:reset && npm run test:db  # 1,647 database tests
+npm run test:db                      # again, twice, to prove order independence
+```
+
+Then, separately — a fresh reset, the built application on port 3100, and the
+scripts **in this order**, because each needs a slice of the database the one
+before it has not used:
+
+```bash
+npm run build && npx next start -p 3100
+node scripts/check-finance-e2e.mjs      # first: it needs an empty ledger
+node scripts/check-auth-e2e.mjs
+node scripts/check-operations-e2e.mjs
+node scripts/check-billing-e2e.mjs
+node scripts/check-workforce-e2e.mjs
+node scripts/check-ownership-e2e.mjs
+node scripts/check-after-hours-e2e.mjs
+node scripts/check-reports-e2e.mjs
+node scripts/check-responsive.mjs       # needs the receipt billing created
+node scripts/check-accessibility.mjs
+node scripts/check-performance.mjs
+```
+
+Running `test:db` on a database the end-to-end scripts have used will fail in
+the hundreds, and the failures are not real: those scripts deliberately put
+the seeded accounts into states the unit-level tests assert they are not in.
+Reset first.
+
+`npm run db:reset` fails silently while a server still holds connections. Kill
+it first (`fuser -k 3100/tcp`).
