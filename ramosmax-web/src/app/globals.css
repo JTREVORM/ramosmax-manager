@@ -53,7 +53,10 @@
     --foreground: #f2f0f5;
     --muted-foreground: #a39fae;
 
-    --primary: #8f6fd4;
+    /* 6.2:1 on the dark surface and 5.2:1 on the warning card. The old
+       #8f6fd4 measured 4.49:1 — just under AA for small text, which is
+       exactly the size a link label is. */
+    --primary: #a68ce0;
     --primary-foreground: #14101c;
     --accent: var(--brand-gold);
     --accent-foreground: #1b1822;
@@ -67,7 +70,7 @@
     --info: #8ebdf5;
     --info-bg: #14263d;
 
-    --ring: color-mix(in srgb, #8f6fd4 55%, transparent);
+    --ring: color-mix(in srgb, #a68ce0 55%, transparent);
   }
 }
 
@@ -79,7 +82,7 @@
   --foreground: #f2f0f5;
   --muted-foreground: #a39fae;
 
-  --primary: #8f6fd4;
+  --primary: #a68ce0;
   --primary-foreground: #14101c;
   --accent: var(--brand-gold);
   --accent-foreground: #1b1822;
@@ -93,7 +96,7 @@
   --info: #8ebdf5;
   --info-bg: #14263d;
 
-  --ring: color-mix(in srgb, #8f6fd4 55%, transparent);
+  --ring: color-mix(in srgb, #a68ce0 55%, transparent);
 }
 
 @theme inline {
@@ -162,6 +165,19 @@ body {
   input[type='submit'] {
     min-height: 44px;
   }
+}
+
+/*
+ * A link inside a sentence is underlined, not merely coloured.
+ *
+ * WCAG 1.4.1: colour alone may not be the only thing distinguishing a link
+ * from the words around it. On a phone in sunlight it very often is not
+ * enough. Standalone links — a row, a card, a navigation item — are not
+ * sentences and keep the hover underline they already had.
+ */
+p a[href] {
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 :where(a, button, input, select, textarea, [tabindex]):focus-visible {
