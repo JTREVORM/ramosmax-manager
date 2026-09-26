@@ -217,3 +217,51 @@ describe('the after-hours sweep: labels and reminders, never enforcement', () =>
     });
   });
 });
+
+describe('authorising by length instead of an end time', () => {
+  it('measures the window against the database clock', async () => {
+    await asAdminDb(async (db) => {
+      const staff = await eligibleWorker(db);
+      const boss = await supervisor(db);
+      await becomeClient(db, boss);
+      const { rows } = await db.query<{ authorization_id: string }>(
+        `select * from app.authorize_after_hours($1, null, 'Evening', 'hours-path-000001',
+           null, null, null, 16)`, [staff]);
+      await becomeOwner(db);
+
+      const { rows: auth } = await db.query<{ hours: string }>(
+        `select round(extract(epoch from (expires_at - starts_at)) / 3600)::text as hours
+           from public.after_hours_access where id = $1`, [rows[0].authorization_id]);
+      // Exactly the policy maximum, accepted.
+      expect(Number(auth[0].hours)).toBe(16);
+    });
+  });
+
+  it('still refuses a length beyond the policy', async () => {
+    await asAdminDb(async (db) => {
+      const staff = await eligibleWorker(db);
+      const boss = await supervisor(db);
+      await becomeClient(db, boss);
+      expect(await db.expectError(
+        `select * from app.authorize_after_hours($1, null, 'Evening', 'hours-path-000002',
+           null, null, null, 20)`, [staff])).toMatch(/at most 16 hours/i);
+      await becomeOwner(db);
+    });
+  });
+
+  it('refuses both an end time and a length, or neither', async () => {
+    await asAdminDb(async (db) => {
+      const staff = await eligibleWorker(db);
+      const boss = await supervisor(db);
+      await becomeClient(db, boss);
+      expect(await db.expectError(
+        `select * from app.authorize_after_hours($1, now() + interval '4 hours', 'Evening',
+           'hours-path-000003', null, null, null, 4)`, [staff]))
+        .toMatch(/how long the authorisation lasts/i);
+      expect(await db.expectError(
+        `select * from app.authorize_after_hours($1, null, 'Evening', 'hours-path-000004')`,
+        [staff])).toMatch(/how long the authorisation lasts/i);
+      await becomeOwner(db);
+    });
+  });
+});

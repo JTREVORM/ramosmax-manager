@@ -12,6 +12,7 @@ import {
 } from '@/lib/server/operations';
 import { currentUser } from '@/lib/server/auth-service';
 import { requireAnyPermission } from '@/lib/server/guard';
+import { paymentContext } from '@/lib/server/after-hours';
 import { InvoiceActions } from './invoice-actions';
 import { PaymentHistory } from './payment-history';
 
@@ -27,12 +28,13 @@ export default async function InvoiceDetailPage({
   const invoice = await getInvoice(invoiceId);
   if (!invoice) notFound();
 
-  const [items, discount, payments, accounts, user] = await Promise.all([
+  const [items, discount, payments, accounts, user, afterHours] = await Promise.all([
     listInvoiceItems(invoiceId),
     getInvoiceDiscount(invoiceId),
     listInvoicePayments(invoiceId),
     listPaymentAccounts(),
     currentUser(),
+    paymentContext(),
   ]);
   const permissions = new Set(user?.permissions ?? []);
   const loyalty = permissions.has('loyalty.view') || permissions.has('loyalty.redeem')
@@ -105,6 +107,7 @@ export default async function InvoiceDetailPage({
         invoice={invoice}
         hasDiscount={discount !== null}
         accounts={accounts}
+        afterHours={afterHours}
         loyalty={loyalty}
         permissions={[...permissions]}
       />

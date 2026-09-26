@@ -193,7 +193,7 @@ const COMMANDS = [
   'cancel_dividend(uuid,text)',
   // after-hours and cash handovers (final phase)
   'update_after_hours_policy(jsonb,text)',
-  'authorize_after_hours(uuid,timestamp with time zone,text,text,timestamp with time zone,text[],bigint)',
+  'authorize_after_hours(uuid,timestamp with time zone,text,text,timestamp with time zone,text[],bigint,integer)',
   'revoke_after_hours(uuid,text)',
   'open_after_hours_session(text,text)',
   'close_after_hours_session(uuid,text)',
@@ -203,6 +203,7 @@ const COMMANDS = [
   'review_cash_discrepancy(uuid,text)',
   'resolve_cash_discrepancy(uuid,text,text,text,boolean,boolean)',
   'my_after_hours()',
+  'after_hours_eligible_staff()',
   'sweep_after_hours()',
 ];
 

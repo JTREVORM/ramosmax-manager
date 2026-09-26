@@ -12,6 +12,7 @@ import {
   markCreditAction, recordPaymentAction,
 } from '@/lib/server/billing-actions';
 import type { InvoiceRow, PaymentAccountRow, VehicleLoyalty } from '@/lib/server/operations';
+import type { PaymentContext } from '@/lib/server/after-hours';
 
 const selectClass =
   'border-border bg-surface text-foreground h-12 w-full rounded-[var(--radius)] border px-3 text-base';
@@ -36,12 +37,14 @@ export function InvoiceActions({
   accounts,
   loyalty,
   permissions,
+  afterHours,
 }: {
   invoice: InvoiceRow;
   hasDiscount: boolean;
   accounts: PaymentAccountRow[];
   loyalty: VehicleLoyalty | null;
   permissions: string[];
+  afterHours: PaymentContext;
 }) {
   const can = (p: string) => permissions.includes(p);
   const [panel, setPanel] = React.useState<string | null>(null);
@@ -50,7 +53,10 @@ export function InvoiceActions({
   const owing = invoice.outstanding_ugx > 0;
   const noPayments = invoice.paid_ugx === 0;
 
-  const canPay = open && owing && can('payments.record');
+  // A worker on an after-hours session collects with `after_hours.cash.collect`
+  // instead of `payments.record`, and only while their session is live.
+  const collectsAfterHours = can('after_hours.cash.collect') && afterHours.live;
+  const canPay = open && owing && (can('payments.record') || collectsAfterHours);
   const canDiscount = open && owing && noPayments && !hasDiscount && can('discounts.apply');
   const canReward =
     open && owing && noPayments && !hasDiscount && can('loyalty.redeem')
@@ -58,7 +64,22 @@ export function InvoiceActions({
   const canCredit = open && owing && !invoice.on_credit && can('credit.manage');
   const canCancel = open && noPayments && can('invoices.void');
 
-  if (!canPay && !canDiscount && !canReward && !canCredit && !canCancel) return null;
+  // Somebody who may only collect AFTER HOURS, with no session open, has
+  // nothing to collect into. Say so rather than showing nothing at all.
+  const needsSession = open && owing && can('after_hours.cash.collect')
+    && !can('payments.record') && !afterHours.live;
+
+  if (!canPay && !canDiscount && !canReward && !canCredit && !canCancel) {
+    return needsSession ? (
+      <Card className="bg-surface-muted">
+        <CardBody>
+          <p className="text-muted-foreground text-sm">
+            Start your after-hours session before collecting payments.
+          </p>
+        </CardBody>
+      </Card>
+    ) : null;
+  }
 
   return (
     <Card>
@@ -106,7 +127,9 @@ export function InvoiceActions({
           )}
         </div>
 
-        {panel === 'pay' && <PaymentPanel invoice={invoice} accounts={accounts} />}
+        {panel === 'pay' && (
+          <PaymentPanel invoice={invoice} accounts={accounts} afterHours={afterHours} />
+        )}
         {panel === 'reward' && loyalty && <RewardPanel invoice={invoice} loyalty={loyalty} />}
         {panel === 'discount' && <DiscountPanel invoice={invoice} />}
         {panel === 'credit' && (
@@ -148,12 +171,19 @@ export function InvoiceActions({
 function PaymentPanel({
   invoice,
   accounts,
+  afterHours,
 }: {
   invoice: InvoiceRow;
   accounts: PaymentAccountRow[];
+  afterHours: PaymentContext;
 }) {
   const [requestId] = React.useState(newRequestId);
-  const [method, setMethod] = React.useState('cash');
+  // On an after-hours session only the methods the policy allows are offered.
+  // The server refuses the rest whatever this list says.
+  const methods = afterHours.live
+    ? METHODS.filter((m) => afterHours.methods.includes(m.value))
+    : METHODS;
+  const [method, setMethod] = React.useState(methods[0]?.value ?? 'cash');
   const [amount, setAmount] = React.useState(String(invoice.outstanding_ugx));
 
   const parsed = parseUgx(amount);
@@ -193,7 +223,7 @@ function PaymentPanel({
             value={method}
             onChange={(e) => setMethod(e.target.value)}
           >
-            {METHODS.map((m) => (
+            {methods.map((m) => (
               <option key={m.value} value={m.value}>
                 {m.label}
               </option>
@@ -226,6 +256,19 @@ function PaymentPanel({
         <Field label="Notes" htmlFor="payment-notes" hint="Optional">
           <Input name="notes" />
         </Field>
+
+        {afterHours.live && method === 'cash' && (
+          <p className="text-muted-foreground text-xs">
+            This cash is added to what you hand over at the end of{' '}
+            {afterHours.sessionNumber}.
+          </p>
+        )}
+        {afterHours.live && method !== 'cash' && (
+          <p className="text-muted-foreground text-xs">
+            This goes straight to the merchant account. It is not in your hands and is not part of
+            your handover.
+          </p>
+        )}
       </div>
     </ActionForm>
   );

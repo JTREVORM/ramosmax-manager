@@ -360,7 +360,12 @@ create or replace function app.authorize_after_hours(
   p_request_id    text,
   p_starts_at     timestamptz default null,
   p_permissions   text[] default null,
-  p_opening_float_ugx bigint default null
+  p_opening_float_ugx bigint default null,
+  -- A length instead of an end time. The screens send this so the window is
+  -- measured against the DATABASE clock: a browser or a web server whose
+  -- clock is a second ahead would otherwise have a full-length shift refused
+  -- for exceeding the policy by that second.
+  p_hours         integer default null
 )
 returns table (authorization_id uuid, authorization_number text, granted text[])
 language plpgsql
@@ -373,6 +378,7 @@ declare
   v_reason    text := app.require_reason(p_reason);
   v_list      text[] := app.require_grant_list(p_permissions);
   v_start     timestamptz;
+  v_expires   timestamptz;
   v_policy    jsonb;
   v_target    public.users%rowtype;
   v_permanent text[];
@@ -386,13 +392,19 @@ declare
 begin
   perform app.require_permission('after_hours.approve');
   perform app.require_request_id(p_request_id);
-  v_start := app.require_temporary_window(p_starts_at, p_expires_at);
+  if (p_expires_at is null) = (p_hours is null) then
+    raise exception 'Choose how long the authorisation lasts.'
+      using errcode = 'invalid_parameter_value', detail = 'window';
+  end if;
+  v_expires := coalesce(p_expires_at,
+                        coalesce(p_starts_at, now()) + make_interval(hours => p_hours));
+  v_start := app.require_temporary_window(p_starts_at, v_expires);
   if v_float <> 0 then
     v_float := app.require_amount(v_float, 'opening float', 0, 10000000);
   end if;
 
   v_cached := app.claim_request(p_request_id, 'after_hours_authorization',
-    jsonb_build_object('staff', p_staff, 'expiresAt', p_expires_at));
+    jsonb_build_object('staff', p_staff, 'expiresAt', v_expires, 'hours', p_hours));
   if v_cached is not null then
     return query select (v_cached ->> 'authorizationId')::uuid,
                         v_cached ->> 'authorizationNumber',
@@ -406,7 +418,7 @@ begin
   end if;
 
   v_policy := app.after_hours_policy();
-  if p_expires_at - v_start
+  if v_expires - v_start
      > make_interval(hours => (v_policy ->> 'maxAuthorizationHours')::integer) then
     raise exception 'An after-hours authorisation can last at most % hours.',
       v_policy ->> 'maxAuthorizationHours'
@@ -456,7 +468,7 @@ begin
     from public.after_hours_access a
    where a.staff_uid = p_staff and a.status = 'active'
      and a.expires_at > now()
-     and a.starts_at < p_expires_at and a.expires_at > v_start
+     and a.starts_at < v_expires and a.expires_at > v_start
    limit 1;
   if v_clash is not null then
     raise exception '% already covers part of this time. Revoke it first.', v_clash
@@ -473,7 +485,7 @@ begin
      permissions, granted, opening_float_ugx, granted_by, granted_by_name, request_id)
   values
     (v_number, p_staff, coalesce(v_target.full_name, p_staff::text), v_target.role,
-     v_start, p_expires_at, v_reason, v_list, v_to_grant, v_float, auth.uid(),
+     v_start, v_expires, v_reason, v_list, v_to_grant, v_float, auth.uid(),
      (select full_name from public.users where id = auth.uid()), p_request_id)
   returning id into v_id;
 
@@ -489,7 +501,7 @@ begin
 
     insert into public.temporary_grants
       (user_id, permission_key, starts_at, expires_at, reason, granted_by, authorization_id)
-    values (p_staff, v_perm, v_start, p_expires_at,
+    values (p_staff, v_perm, v_start, v_expires,
             'After-hours ' || v_number || ': ' || v_reason, auth.uid(), v_id);
   end loop;
 
@@ -500,13 +512,13 @@ begin
   perform app.audit('after_hours.authorized', 'after_hours', v_id::text, p_staff,
     v_number, v_reason, null,
     jsonb_build_object('authorizationNumber', v_number, 'startsAt', v_start,
-                       'expiresAt', p_expires_at, 'permissions', to_jsonb(v_list),
+                       'expiresAt', v_expires, 'permissions', to_jsonb(v_list),
                        'temporaryGrants', to_jsonb(v_to_grant), 'openingFloatUgx', v_float));
 
   insert into public.after_hours_events (type, reference_type, reference_id, audience,
                                          recipient_uid, payload)
   values ('after_hours_authorized', 'authorization', v_id, 'recipient', p_staff,
-          jsonb_build_object('authorizationNumber', v_number, 'expiresAt', p_expires_at));
+          jsonb_build_object('authorizationNumber', v_number, 'expiresAt', v_expires));
 
   perform app.complete_request(p_request_id, jsonb_build_object(
     'authorizationId', v_id, 'authorizationNumber', v_number, 'granted', to_jsonb(v_to_grant)));

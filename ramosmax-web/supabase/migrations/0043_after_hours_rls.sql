@@ -238,3 +238,31 @@ $$;
 
 comment on function app.sweep_after_hours() is
   'Labels and reminders only. Expiry is enforced by app.effective_permissions comparing the grant window to the server clock — never by this sweep.';
+
+/*
+ * Who may be put on an after-hours shift.
+ *
+ * Eligibility is a PERMANENT permission, so this asks
+ * `app.permanent_permissions` — which stays unreachable from a browser,
+ * because "what does this person hold" is not a question the client gets to
+ * ask about anybody it likes. Only a holder of `after_hours.approve` may see
+ * the list, and it carries a name and a role and nothing else.
+ */
+create or replace function app.after_hours_eligible_staff()
+returns table (id uuid, full_name text, role text)
+language plpgsql
+stable
+security definer
+set search_path = app, public, pg_temp
+as $$
+begin
+  perform app.require_permission('after_hours.approve');
+  return query
+    select u.id, u.full_name, u.role
+      from public.users u
+     where u.active
+       and 'after_hours.request' = any (app.permanent_permissions(u.id))
+       and not ('after_hours.operate' = any (coalesce(u.denied_permissions, '{}')))
+     order by u.full_name;
+end;
+$$;

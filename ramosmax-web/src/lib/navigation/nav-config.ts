@@ -167,7 +167,12 @@ export const NAV_SECTIONS: readonly NavSection[] = [
       {
         href: '/after-hours',
         label: 'After-Hours',
-        anyOf: ['after_hours.view', 'after_hours.approve'],
+        anyOf: [
+          'after_hours.view',
+          'after_hours.approve',
+          'cash_handover.approve',
+          'after_hours.discrepancy.review',
+        ],
         icon: 'MoonStar',
       },
       {

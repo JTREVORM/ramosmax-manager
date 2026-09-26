@@ -679,12 +679,12 @@ async function ownershipFixtures(db) {
   );
   if (!transaction) {
     const account = await first(
-      `select id from public.financial_accounts where active order by created_at limit 1`,
+      `select id from public.financial_accounts where is_active order by created_at limit 1`,
     );
     transaction = (
       await asAdmin(
         `select transaction_id as id from app.issue_shares($1, $2, 250, $3,
-           (app.eat_day() - 4)::date, 'account', null, $4)`,
+           (app.eat_day() - 4)::date, 'account', 25000000, $4)`,
         [shareholder.id, klass.id, `resp-issue-${unique}`, account?.id ?? null],
       )
     ).rows[0];
@@ -765,6 +765,145 @@ async function checkOwnership(page, viewport, fixtures) {
   await page.screenshot({ path: `${OUT}/phaseG-${viewport.name}-register.png`, fullPage: true });
 }
 
+
+/**
+ * After-hours fixtures.
+ *
+ * A dedicated worker of its own, so the screens always have an authorisation,
+ * an open session, a handover and a discrepancy to render — and so this never
+ * collides with whatever the end-to-end scripts left behind.
+ */
+async function afterHoursFixtures(db) {
+  const ADMIN = '00000000-0000-4000-8000-000000000001';
+  const asUser = async (uid, sql, params = []) => {
+    await db.query('begin');
+    try {
+      await db.query(`select set_config('request.jwt.claims', $1, true)`, [
+        JSON.stringify({ sub: uid, role: 'authenticated' }),
+      ]);
+      await db.query('set local role authenticated');
+      const result = await db.query(sql, params);
+      await db.query('commit');
+      return result;
+    } catch (e) {
+      await db.query('rollback');
+      throw e;
+    }
+  };
+  const first = async (sql, params) => (await db.query(sql, params)).rows[0];
+  const unique = Math.random().toString(36).slice(2, 8);
+
+  // A second Administrator, so nobody counts their own cash.
+  let counter = await first(
+    `select id from public.users where phone_number = '+256772000098'`,
+  );
+  if (!counter) {
+    counter = await first(`
+      with u as (
+        insert into auth.users (email) values (app.new_sign_in_identity()) returning id)
+      insert into public.users (id, phone_number, full_name, role, active)
+      select u.id, '+256772000098', 'Responsive Counter', 'admin', true from u returning id`);
+  }
+
+  const makeWorker = async (phone, name) => {
+    const existing = await first(`select id from public.users where phone_number = $1`, [phone]);
+    if (existing) return existing.id;
+    const made = await first(`
+      with u as (
+        insert into auth.users (email) values (app.new_sign_in_identity()) returning id)
+      insert into public.users (id, phone_number, full_name, role, active)
+      select u.id, $1, $2, 'worker', true from u returning id`, [phone, name]);
+    return made.id;
+  };
+
+  // One worker with a session still open.
+  const onDuty = await makeWorker('+256772000097', 'Responsive Night Worker');
+  let open = await first(
+    `select id from public.after_hours_sessions where staff_uid = $1 and status = 'open'`,
+    [onDuty],
+  );
+  if (!open) {
+    await asUser(ADMIN, `select * from app.authorize_after_hours($1, null, 'Responsive fixture',
+      $2, null, null, 50000, 8)`, [onDuty, `resp-auth-${unique}`]);
+    open = (await asUser(onDuty, `select session_id as id from app.open_after_hours_session($1)`,
+      [`resp-open-${unique}`])).rows[0];
+  }
+
+  // Another whose cash has been handed over and came up short.
+  const handedOver = await makeWorker('+256772000096', 'Responsive Handover Worker');
+  let discrepancy = await first(
+    `select d.id, d.handover_id from public.cash_discrepancies d where d.staff_uid = $1 limit 1`,
+    [handedOver],
+  );
+  if (!discrepancy) {
+    await asUser(ADMIN, `select * from app.authorize_after_hours($1, null, 'Responsive fixture',
+      $2, null, null, 80000, 8)`, [handedOver, `resp-auth2-${unique}`]);
+    const session = (await asUser(handedOver,
+      `select session_id as id from app.open_after_hours_session($1)`,
+      [`resp-open2-${unique}`])).rows[0];
+    const closed = (await asUser(handedOver,
+      `select handover_id as id from app.close_after_hours_session($1)`, [session.id])).rows[0];
+    await asUser(handedOver, `select * from app.submit_cash_handover($1, 80000, $2)`,
+      [closed.id, `resp-submit-${unique}`]);
+    discrepancy = (await asUser(counter.id,
+      `select discrepancy_id as id, $1::uuid as handover_id
+         from app.receive_cash_handover($1, 75000, $2, 'Five thousand missing')`,
+      [closed.id, `resp-receive-${unique}`])).rows[0];
+    discrepancy.handover_id = closed.id;
+  }
+
+  return { session: open.id, handover: discrepancy.handover_id, discrepancy: discrepancy.id };
+}
+
+/**
+ * The after-hours screens.
+ *
+ * These are read on a phone, at night, by the person holding the cash. The
+ * amount they owe has to be legible without scrolling sideways.
+ */
+async function checkAfterHours(page, viewport, fixtures) {
+  const screens = [
+    ['/after-hours', 'After-hours'],
+    ['/after-hours?tab=authorisations', 'After-hours'],
+    ['/after-hours?tab=sessions', 'After-hours'],
+    ['/after-hours?tab=handovers', 'After-hours'],
+    ['/after-hours?tab=discrepancies', 'After-hours'],
+    ['/after-hours?tab=reports', 'After-hours'],
+    ['/after-hours?tab=policy', 'After-hours'],
+    ['/my-after-hours', 'My after-hours'],
+  ];
+
+  for (const [path, title] of screens) {
+    await page.goto(`${BASE}${path}`, { waitUntil: 'domcontentloaded' });
+    const heading = await page.getByRole('heading', { level: 1 }).first().textContent();
+    check(heading.trim() === title, `${path} renders`);
+    check((await pageOverflow(page)) <= 0, `${path} has no horizontal scroll`);
+  }
+
+  for (const [path, label] of [
+    [`/after-hours/session/${fixtures.session}`, 'session-detail'],
+    [`/after-hours/handover/${fixtures.handover}`, 'handover-detail'],
+    [`/after-hours/discrepancy/${fixtures.discrepancy}`, 'discrepancy-detail'],
+  ]) {
+    await page.goto(`${BASE}${path}`, { waitUntil: 'domcontentloaded' });
+    check((await pageOverflow(page)) <= 0, `the ${label} screen has no horizontal scroll`);
+    await page.screenshot({ path: `${OUT}/phaseH-${viewport.name}-${label}.png`, fullPage: true });
+  }
+
+  // The handovers list is the densest after-hours table: cards on a phone.
+  await page.goto(`${BASE}/after-hours?tab=handovers`, { waitUntil: 'domcontentloaded' });
+  const table = page.getByRole('table').first();
+  const list = page.getByRole('list', { name: 'Cash handovers' }).first();
+  if (viewport.width >= 768) {
+    check(await table.isVisible(), 'the handovers are a table on a wide screen');
+    check(!(await list.isVisible()), 'the handover card list is hidden on a wide screen');
+  } else {
+    check(await list.isVisible(), 'the handovers render as cards on a phone');
+    check(!(await table.isVisible()), 'the handover table is hidden on a phone');
+  }
+  await page.screenshot({ path: `${OUT}/phaseH-${viewport.name}-handovers.png`, fullPage: true });
+}
+
 async function main() {
   mkdirSync(OUT, { recursive: true });
 
@@ -774,6 +913,7 @@ async function main() {
   const moneyIds = await moneyFixtures(db);
   const workforceIds = await workforceFixtures(db);
   const ownershipIds = await ownershipFixtures(db);
+  const afterHoursIds = await afterHoursFixtures(db);
 
   const browser = await chromium.launch({
     // The sandbox ships a pinned Chromium; use it rather than downloading one.
@@ -796,6 +936,7 @@ async function main() {
     await checkPhaseE(page, viewport, moneyIds);
     await checkPhaseF(page, viewport, workforceIds);
     await checkOwnership(page, viewport, ownershipIds);
+    await checkAfterHours(page, viewport, afterHoursIds);
 
     await context.close();
   }

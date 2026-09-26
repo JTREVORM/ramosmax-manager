@@ -217,9 +217,10 @@ grant execute on function
   app.after_hours_default_grants(),
   app.after_hours_context(uuid),
   app.my_after_hours(),
+  app.after_hours_eligible_staff(),
   app.update_after_hours_policy(jsonb, text),
   -- authorisations
-  app.authorize_after_hours(uuid, timestamptz, text, text, timestamptz, text[], bigint),
+  app.authorize_after_hours(uuid, timestamptz, text, text, timestamptz, text[], bigint, integer),
   app.revoke_after_hours(uuid, text),
   -- sessions
   app.open_after_hours_session(text, text),
