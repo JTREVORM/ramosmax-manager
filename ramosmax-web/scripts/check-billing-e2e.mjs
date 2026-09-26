@@ -545,6 +545,12 @@ let secondInvoice;
 console.log('\n  cashier: the customer leaves owing; credit is not cash');
 {
   const { page } = cashier;
+  // Relative, not absolute: another script may have put money in this account
+  // before this one ran. What matters is that credit moves NONE.
+  const cashBefore = Number(
+    (await one(`select balance_ugx from public.financial_accounts where code = 'cash_at_hand'`))
+      .balance_ugx,
+  );
   await page.goto(`${BASE}/invoices/${secondInvoice}`, { waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: 'Put on credit' }).click();
   await page.locator('input[name="reason"]').last().fill('Regular customer, paying on Friday');
@@ -559,7 +565,7 @@ console.log('\n  cashier: the customer leaves owing; credit is not cash');
   const cash = await one(
     `select balance_ugx from public.financial_accounts where code = 'cash_at_hand'`,
   );
-  check(Number(cash.balance_ugx) === 22500, 'the cash account still holds only the cash taken');
+  check(Number(cash.balance_ugx) === cashBefore, 'putting an invoice on credit moved no cash');
 
   await page.goto(`${BASE}/credit`, { waitUntil: 'domcontentloaded' });
   const body = await page.textContent('body');

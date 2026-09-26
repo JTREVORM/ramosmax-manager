@@ -106,12 +106,22 @@ if (when.second_day === when.day) {
   process.exit(1);
 }
 
-// The business needs money before it can pay anyone.
+// The business needs money before it can pay anyone. An opening balance can
+// only be recorded once, so on a database another script has already used,
+// the money goes in as an adjustment instead.
+const { rows: opened } = await db.query(
+  `select opening_balance_recorded as done
+     from public.financial_accounts where code = 'cash_at_hand'`);
 await asUser(
   ADMIN,
-  `
-  select * from app.record_opening_balance(
-    (select id from public.financial_accounts where code = 'cash_at_hand'), 5000000, 'E2E float')`,
+  opened[0].done
+    ? `select app.record_account_adjustment(
+         (select id from public.financial_accounts where code = 'cash_at_hand'),
+         'in', 5000000, 'E2E float', $1)`
+    : `select * from app.record_opening_balance(
+         (select id from public.financial_accounts where code = 'cash_at_hand'),
+         5000000, 'E2E float')`,
+  opened[0].done ? [`e2e-float-${Date.now()}`] : [],
 );
 
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH ?? undefined });

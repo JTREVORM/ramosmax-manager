@@ -386,6 +386,11 @@ console.log('\n  the discrepancy: reviewed, resolved, and never deducted');
   );
 
   const before = await balance('cash_at_hand');
+  // Relative, not absolute: the workforce script may have scheduled a
+  // deduction for this same person. What matters is that resolving a
+  // shortage adds NONE.
+  const deductionsBefore = (await one(
+    `select count(*)::int as n from public.salary_deductions where staff_uid = $1`, [WORKER])).n;
   const adm = admin.page;
   await adm.goto(`${BASE}/after-hours/discrepancy/${discrepancyId}`, { waitUntil: 'domcontentloaded' });
   await adm.getByRole('button', { name: 'Close it' }).click();
@@ -416,7 +421,7 @@ console.log('\n  the discrepancy: reviewed, resolved, and never deducted');
   check(num(incident?.recovered_ugx) === 0, 'and nothing has been recovered');
   const deductions = await one(
     `select count(*)::int as n from public.salary_deductions where staff_uid = $1`, [WORKER]);
-  check(deductions.n === 0, 'the worker has no deduction at all');
+  check(deductions.n === deductionsBefore, 'and the worker gained no deduction from it');
 
   check(await balance('cash_at_hand') === before - 5_000, 'the adjustment took exactly the shortage');
   check(await ledgerAgrees(), 'and the ledger still agrees with every balance');
