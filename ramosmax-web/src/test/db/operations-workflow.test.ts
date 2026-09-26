@@ -212,13 +212,22 @@ describe('customer → vehicle → intake → assign → work → ready to invoi
                              'calculate_dividend', 'pay_dividend', 'my_shareholding')`);
       expect(ownership).toHaveLength(6);
 
-      // The current boundary: after-hours and cash handovers have no functions
-      // yet.
+      // After-hours work and cash handovers have arrived.
+      const { rows: afterHours } = await db.query<{ proname: string }>(`
+        select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+         where n.nspname = 'app'
+           and p.proname in ('authorize_after_hours', 'open_after_hours_session',
+                             'close_after_hours_session', 'submit_cash_handover',
+                             'receive_cash_handover', 'resolve_cash_discrepancy')`);
+      expect(afterHours).toHaveLength(6);
+
+      // The current boundary: server-side reports and notifications have no
+      // functions yet.
       const { rows: later } = await db.query<{ n: string }>(`
         select count(*)::text as n from pg_proc p join pg_namespace n on n.oid = p.pronamespace
          where n.nspname = 'app'
-           and (p.proname like '%after_hours%' or p.proname like '%handover%'
-                or p.proname like '%custody%')`);
+           and (p.proname like '%_report%' or p.proname like '%notification%'
+                or p.proname like '%push_%')`);
       expect(Number(later[0].n)).toBe(0);
 
       // The vehicle can start a new job now that this one is finished.

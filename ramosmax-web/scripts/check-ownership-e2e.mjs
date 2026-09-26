@@ -124,8 +124,7 @@ if (
 
 // A second Administrator, because nobody approves their own request. The
 // password hash is the same development one the seed uses.
-const secondAdmin = (
-  await db.query(`
+await db.query(`
     with u as (
       insert into auth.users (email, encrypted_password, email_confirmed_at)
       values (app.new_sign_in_identity(), crypt($1, gen_salt('bf')), now())
@@ -133,9 +132,8 @@ const secondAdmin = (
     insert into public.users (id, phone_number, full_name, role, active)
     select u.id, '+256772000099', 'Second Administrator', 'admin', true from u
     returning id`,
-    [PASSWORD],
-  )
-).rows[0].id;
+  [PASSWORD],
+);
 
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH ?? undefined });
 

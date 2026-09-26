@@ -61,6 +61,14 @@ const PURE_HELPERS = [
   'dividend_policy()',
   'share_transaction_lines(uuid)',
   'ownership_percent(bigint,bigint)',
+  // after-hours (final phase): the policy, the list of permissions an
+  // authorisation may hand out, and the caller's OWN open session. None of
+  // them reveals anybody else's session, cash or handover.
+  'after_hours_policy()',
+  'after_hours_methods()',
+  'after_hours_grantable()',
+  'after_hours_default_grants()',
+  'after_hours_context(uuid)',
 ];
 
 /** The command surface: every function a browser may ask for by name. */
@@ -183,6 +191,19 @@ const COMMANDS = [
   'pay_dividend(uuid,uuid[],uuid,text,text,date)',
   'reverse_dividend_payment(uuid,text)',
   'cancel_dividend(uuid,text)',
+  // after-hours and cash handovers (final phase)
+  'update_after_hours_policy(jsonb,text)',
+  'authorize_after_hours(uuid,timestamp with time zone,text,text,timestamp with time zone,text[],bigint)',
+  'revoke_after_hours(uuid,text)',
+  'open_after_hours_session(text,text)',
+  'close_after_hours_session(uuid,text)',
+  'cancel_after_hours_session(uuid,text)',
+  'submit_cash_handover(uuid,bigint,text,text)',
+  'receive_cash_handover(uuid,bigint,text,text,text)',
+  'review_cash_discrepancy(uuid,text)',
+  'resolve_cash_discrepancy(uuid,text,text,text,boolean,boolean)',
+  'my_after_hours()',
+  'sweep_after_hours()',
 ];
 
 const ALLOWED = new Set([...RLS_HELPERS, ...PURE_HELPERS, ...COMMANDS]);
@@ -260,6 +281,18 @@ describe('no app function is callable by a client unless it is on the allow-list
       'read_dividend',
       'contribution_for',
       'check_share_payment',
+      'permanent_permissions',
+      'require_temporary_window',
+      'require_grant_list',
+      'authorization_is_live',
+      'expected_from_payments',
+      'tag_after_hours',
+      'tag_completed_order',
+      'count_on_session',
+      'count_completed_order',
+      'record_payment_custody',
+      'record_reversal_custody',
+      'require_not_own_handover',
     ]) {
       const found = [...exposed].filter((s) => s.startsWith(`${internal}(`));
       expect(found, `${internal} is callable by a client`).toEqual([]);
