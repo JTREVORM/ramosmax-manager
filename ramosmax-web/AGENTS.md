@@ -22,20 +22,32 @@ Notes that matter in this repository, beyond the Next.js guidance above:
 
 ## Environment
 
-`.env.example` documents every variable. Three groups matter:
+`.env.example` documents every variable. Two decisions are independent, and
+keeping them apart is the point (see the comment at the top of
+`src/lib/server/db.ts`):
 
-- **Supabase** (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
-  `SUPABASE_SERVICE_ROLE_KEY`). With no URL set, the app talks to
-  `DATABASE_URL` directly and calls the same functions, which is how the
-  development database works without a hosted project.
-- **Web Push** (`NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`,
-  `VAPID_SUBJECT`). Optional: without them the in-app inbox still works.
-- **Notification delivery** (`NOTIFICATION_CRON_SECRET`). Required by
-  `POST /api/notifications/deliver`, which a scheduler calls.
+- **Where the data is read** — always `DATABASE_URL`, a PostgreSQL connection.
+  Locally a database on this machine; deployed, the Supabase project's pooled
+  connection string. Every read drops to the `authenticated` role and sets the
+  caller's claims first, so RLS decides what comes back.
+- **Where passwords live** — `NEXT_PUBLIC_SUPABASE_URL` /
+  `NEXT_PUBLIC_SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY`. With them,
+  credentials are Supabase Auth's; without, bcrypt hashes in a local
+  `auth.users` checked with the same scheme GoTrue uses.
+  `src/lib/server/auth-provider.ts` is that seam and nothing else depends on it.
 
-The service-role key bypasses RLS. It is used only by `serviceDb()` in
-`src/lib/server/db.ts`, for the notification delivery run, and never anywhere
-a browser can reach.
+Then `SESSION_SECRET` (required for a deployment; signs the session cookie),
+and two optional groups: **Web Push** (`NEXT_PUBLIC_VAPID_PUBLIC_KEY`,
+`VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`) and **notification delivery**
+(`NOTIFICATION_CRON_SECRET`, for `POST /api/notifications/deliver`).
+
+The service-role key bypasses RLS. It reaches only the credential store, in
+`auth-provider.ts` and the two places that create or reset a password, and it
+is never given to a browser — the `server-only` import at the top of each of
+those modules fails the build rather than letting one be shipped to a client.
+
+`docs/DEPLOY_DEV.md` is the deployment path; `node scripts/check-deployment-ready.mjs`
+says what is still missing.
 
 ## Running the checks
 
@@ -44,7 +56,7 @@ There are two harnesses and **they do not share a database**. Each starts from
 
 ```bash
 npm run verify                       # generate, parse SQL, lint, typecheck, unit tests
-npm run db:reset && npm run test:db  # 1,647 database tests
+npm run db:reset && npm run test:db  # 1,652 database tests
 npm run test:db                      # again, twice, to prove order independence
 ```
 

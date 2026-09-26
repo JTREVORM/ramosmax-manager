@@ -40,14 +40,27 @@ interface PendingPush {
   subscriptions: Array<{ endpoint: string; p256dh: string; auth: string }>;
 }
 
+/**
+ * The VAPID public key.
+ *
+ * It is public by definition — the browser is handed it in order to subscribe
+ * — so `NEXT_PUBLIC_VAPID_PUBLIC_KEY` is its home, and that is the one the
+ * subscribe button reads. The server signs with the SAME key, because a push
+ * signed with a different key than the subscription was made with is rejected
+ * by the push service. `VAPID_PUBLIC_KEY` is accepted as an older spelling.
+ */
+function vapidPublicKey(): string | undefined {
+  return process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? process.env.VAPID_PUBLIC_KEY;
+}
+
 export function pushConfigured(): boolean {
-  return Boolean(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY);
+  return Boolean(vapidPublicKey() && process.env.VAPID_PRIVATE_KEY);
 }
 
 function configure(): void {
   webpush.setVapidDetails(
     process.env.VAPID_SUBJECT ?? 'mailto:admin@ramosmax.example',
-    process.env.VAPID_PUBLIC_KEY!,
+    vapidPublicKey()!,
     process.env.VAPID_PRIVATE_KEY!,
   );
 }

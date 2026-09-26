@@ -253,13 +253,13 @@ export async function currentUser(): Promise<CurrentUser | null> {
   const userId = await sessionUserId();
   if (!userId) return null;
 
-  const { backend, localPool } = await import('./db');
-  if (backend() === 'supabase') {
-    // Under Supabase the page reads through the user's own token so RLS
-    // applies; this path is completed when the project is configured.
-    return null;
-  }
-
+  // Read with service privileges, not as the user: this is the call that
+  // DECIDES whether they may use the app at all, so it has to be able to see
+  // an account that has just been deactivated or locked out. Everything the
+  // pages then read goes through `queryAsUser`, under the person's own
+  // authority. Reaching the database is the same either way; only where the
+  // PASSWORD lives differs, and that is `auth-provider.ts`.
+  const { localPool } = await import('./db');
   const pool = await localPool();
   const { rows } = await pool.query(
     `select u.id, u.full_name, u.role, u.staff_id, u.active, u.must_change_password,
