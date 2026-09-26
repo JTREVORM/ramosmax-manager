@@ -40,7 +40,8 @@ const ids = await one(`
          (select id from public.after_hours_sessions order by opened_at desc limit 1) as session,
          (select id from public.cash_handovers order by created_at desc limit 1) as handover,
          (select id from public.share_transactions order by created_at desc limit 1) as txn,
-         (select id from public.dividends order by created_at desc limit 1) as dividend`);
+         (select id from public.dividends order by created_at desc limit 1) as dividend,
+         (select id from public.users where role = 'worker' order by created_at limit 1) as person`);
 
 /** Every screen a person can reach, with the widest one of each shape. */
 const SCREENS = [
@@ -86,6 +87,7 @@ if (ids.session) SCREENS.push([`/after-hours/session/${ids.session}`, 'Session d
 if (ids.handover) SCREENS.push([`/after-hours/handover/${ids.handover}`, 'Handover detail']);
 if (ids.txn) SCREENS.push([`/shares/txn/${ids.txn}`, 'Share transaction']);
 if (ids.dividend) SCREENS.push([`/dividends/${ids.dividend}`, 'Dividend detail']);
+if (ids.person) SCREENS.push([`/users/${ids.person}`, 'Account detail']);
 
 const VIEWPORTS = [
   { name: 'phone', width: 390, height: 844, colorScheme: 'light' },
@@ -98,12 +100,19 @@ const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PAT
 async function audit(page, path) {
   await page.goto(`${BASE}${path}`, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(250);
+  // A screen that does not exist has nothing to find fault with, so without
+  // this a missing route would report as perfectly accessible.
+  const missing = await page.evaluate(
+    () => /404/.test(document.title) ||
+      document.body.innerText.includes('This page could not be found'),
+  );
   await page.addScriptTag({ content: AXE });
-  return page.evaluate(async () =>
+  const result = await page.evaluate(async () =>
     window.axe.run(document, {
       runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'] },
       resultTypes: ['violations'],
     }));
+  return { ...result, missing };
 }
 
 let audited = 0;
@@ -131,8 +140,8 @@ for (const viewport of VIEWPORTS) {
     );
     audited += 1;
     check(
-      serious.length === 0,
-      `${label} — ${serious.length === 0
+      !result.missing && serious.length === 0,
+      `${label} — ${result.missing ? 'THE SCREEN DOES NOT EXIST' : serious.length === 0
         ? 'no serious or critical issues'
         : serious.map((v) => `${v.id} (${v.nodes.length})`).join(', ')}`,
     );
@@ -150,8 +159,9 @@ for (const viewport of VIEWPORTS) {
   );
   audited += 1;
   check(
-    serious.length === 0,
-    `Sign in — ${serious.length === 0 ? 'no serious or critical issues'
+    !result.missing && serious.length === 0,
+    `Sign in — ${result.missing ? 'THE SCREEN DOES NOT EXIST' : serious.length === 0
+      ? 'no serious or critical issues'
       : serious.map((v) => `${v.id} (${v.nodes.length})`).join(', ')}`,
   );
   await context.close();

@@ -11,10 +11,12 @@ import {
   getJob,
   listAssignableWorkers,
   listJobOrders,
+  listServices,
 } from '@/lib/server/operations';
 import { currentUser } from '@/lib/server/auth-service';
 import { JobOrders } from './job-orders';
 import { CancelJobForm } from './cancel-job-form';
+import { EditServicesForm } from './edit-services-form';
 import { BillingSection } from './billing-section';
 import { requireAnyPermission } from '@/lib/server/guard';
 
@@ -32,12 +34,22 @@ export default async function JobDetailPage({ params }: { params: Promise<{ jobI
 
   const canInvoice = user?.permissions.includes('invoices.create') ?? false;
   const canSeeInvoice = user?.permissions.includes('invoices.view') ?? false;
+  const canEditServices = user?.permissions.includes('jobs.create') ?? false;
 
   const [orders, workers, invoice] = await Promise.all([
     listJobOrders(jobId),
     canAssign ? listAssignableWorkers() : Promise.resolve([]),
     canSeeInvoice ? getInvoiceForJob(jobId) : Promise.resolve(null),
   ]);
+
+  // A job that has been invoiced is priced and settled: the database refuses to
+  // change its services, so the screen does not offer to.
+  const servicesEditable =
+    canEditServices &&
+    job.status !== 'cancelled' &&
+    job.status !== 'completed' &&
+    (!invoice || invoice.status === 'cancelled');
+  const catalogue = servicesEditable ? await listServices(true) : [];
 
   const total = job.selected_services.reduce((sum, s) => sum + Number(s.priceUgx), 0);
 
@@ -107,6 +119,15 @@ export default async function JobDetailPage({ params }: { params: Promise<{ jobI
             </span>
             <span className="tabular text-foreground font-semibold">{formatUgx(total)}</span>
           </div>
+          {servicesEditable && (
+            <div className="border-border border-t px-4 py-3">
+              <EditServicesForm
+                jobId={jobId}
+                services={catalogue}
+                selected={job.selected_services.map((s) => s.serviceId)}
+              />
+            </div>
+          )}
         </CardBody>
       </Card>
 

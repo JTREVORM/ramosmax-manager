@@ -186,6 +186,23 @@ export async function createServiceIntakeAction(form: FormData): Promise<ActionR
   );
 }
 
+/**
+ * Changes the services on a job that has not been invoiced yet.
+ *
+ * The prices are NOT sent: the function re-reads them from the catalogue, the
+ * same way the job read them when it was created. A service already being
+ * worked on is refused by the database, not hidden here.
+ */
+export async function updateServiceIntakeAction(form: FormData): Promise<ActionResult> {
+  const id = String(form.get('id'));
+  const services = form.getAll('service_ids').map(String);
+  return run(
+    'update_service_intake',
+    [id, services, false, form.get('reason')],
+    ['/jobs', `/jobs/${id}`, '/my-jobs'],
+  );
+}
+
 export async function cancelServiceIntakeAction(form: FormData): Promise<ActionResult> {
   const id = String(form.get('id'));
   return run('cancel_service_intake', [id, form.get('reason')], ['/jobs', `/jobs/${id}`]);

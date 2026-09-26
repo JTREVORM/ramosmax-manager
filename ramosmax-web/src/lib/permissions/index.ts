@@ -16,6 +16,7 @@ import {
   PERMISSIONS,
   ROLE_PERMISSIONS,
   ROLE_RANKS,
+  ROLES,
   type Permission,
   type Role,
 } from './catalogue.generated';
@@ -123,6 +124,18 @@ export function canAdminister(actor: Role, target: Role): boolean {
   if (actor === 'admin') return true;
   if (target === 'admin') return false;
   return roleRank(target) < roleRank(actor);
+}
+
+/**
+ * The roles this person may put somebody else into.
+ *
+ * An Administrator may assign any role; everybody else only roles ranked
+ * BELOW their own, and never Administrator — the same rule
+ * `app.require_can_assign_role` enforces in the database.
+ */
+export function assignableRoles(actor: Role): Role[] {
+  if (actor === 'admin') return [...ROLES];
+  return ROLES.filter((role: Role) => role !== 'admin' && roleRank(role) < roleRank(actor));
 }
 
 /** Admins for anyone they may administer; others only for the listed roles. */

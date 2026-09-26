@@ -11,6 +11,11 @@ const deliver = async (db: Session) =>
   (await db.query<{ events_delivered: number; notices_written: number }>(
     `select * from app.deliver_events()`)).rows[0];
 
+/** Notices this person holds, counted with full privileges. */
+const noticeCount = async (db: Session, uid: string) =>
+  Number((await db.query<{ n: string }>(
+    `select count(*) as n from public.notifications where recipient_id = $1`, [uid])).rows[0].n);
+
 const inboxOf = async (db: Session, uid: string) => {
   await becomeClient(db, uid);
   const { rows } = await db.query<{ type: string; title: string; body: string; critical: boolean }>(
@@ -82,10 +87,20 @@ describe('notifications: one notice per event', () => {
       const staff = await eligibleWorker(db);
       const boss = await supervisor(db);
       await authorize(db, { staff, by: boss });
-      const first = await deliver(db);
-      const second = await deliver(db);
-      expect(Number(first.events_delivered)).toBeGreaterThan(0);
-      expect(Number(second.events_delivered)).toBe(0);
+
+      // A delivery run is capped, so "nothing more to do" only means anything
+      // once the backlog every other suite has committed is actually drained.
+      let delivered = 0;
+      for (let run = 0; run < 50; run += 1) {
+        const batch = Number((await deliver(db)).events_delivered);
+        delivered += batch;
+        if (batch === 0) break;
+      }
+      expect(delivered).toBeGreaterThan(0);
+
+      const before = await noticeCount(db, staff);
+      expect(Number((await deliver(db)).events_delivered)).toBe(0);
+      expect(await noticeCount(db, staff)).toBe(before);
     });
   });
 

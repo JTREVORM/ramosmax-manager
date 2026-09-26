@@ -90,6 +90,8 @@ const COMMANDS = [
   'change_user_phone(uuid,text,text)',
   'link_staff(uuid,text)',
   'revoke_temporary_permission(uuid,text)',
+  // Reads its own caller: your own access always, somebody else's with users.view.
+  'user_access(uuid)',
   // operations (Phase C)
   'create_customer(text,text,text,text,text,text)',
   'update_customer(uuid,text,text,text,text,text,text)',

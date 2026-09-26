@@ -956,6 +956,51 @@ async function checkReports(page, viewport) {
   await page.screenshot({ path: `${OUT}/reports-${viewport.name}-notices.png`, fullPage: true });
 }
 
+/**
+ * Administration: the accounts, the rules and the trail.
+ *
+ * The account screen is the one place a phone number and a list of 127
+ * permission keys share a page, so it is the one most likely to push the
+ * layout sideways.
+ */
+async function checkAdministration(page, viewport, personId) {
+  const screens = [
+    ['/users', 'User management'],
+    ['/users?role=worker', 'User management'],
+    ['/settings', 'Settings'],
+    ['/audit', 'Audit logs'],
+    ['/audit?module=users', 'Audit logs'],
+  ];
+  if (personId) screens.push([`/users/${personId}`, null]);
+
+  for (const [path, title] of screens) {
+    await page.goto(`${BASE}${path}`, { waitUntil: 'domcontentloaded' });
+    const heading = (await page.getByRole('heading', { level: 1 }).first().textContent()).trim();
+    // The account screen is titled with the person's own name, so all that can
+    // be asserted there is that it is not the "not found" page.
+    check(title ? heading === title : heading !== '404', `${path} renders`);
+    check((await pageOverflow(page)) <= 0, `${path} has no horizontal scroll`);
+  }
+
+  // The user list is the table/card switch again.
+  await page.goto(`${BASE}/users`, { waitUntil: 'domcontentloaded' });
+  const table = page.getByRole('table').first();
+  const list = page.getByRole('list', { name: 'People' }).first();
+  if (viewport.width >= 768) {
+    check(await table.isVisible(), 'the accounts render as a table on a wide screen');
+    check(!(await list.isVisible()), 'the account card list is hidden on a wide screen');
+  } else {
+    check(await list.isVisible(), 'the accounts render as cards on a phone');
+    check(!(await table.isVisible()), 'the account table is hidden on a phone');
+  }
+  await page.screenshot({ path: `${OUT}/admin-${viewport.name}-users.png`, fullPage: true });
+
+  await page.goto(`${BASE}/settings`, { waitUntil: 'domcontentloaded' });
+  await page.screenshot({ path: `${OUT}/admin-${viewport.name}-settings.png`, fullPage: true });
+  await page.goto(`${BASE}/audit`, { waitUntil: 'domcontentloaded' });
+  await page.screenshot({ path: `${OUT}/admin-${viewport.name}-audit.png`, fullPage: true });
+}
+
 async function main() {
   mkdirSync(OUT, { recursive: true });
 
@@ -966,6 +1011,9 @@ async function main() {
   const workforceIds = await workforceFixtures(db);
   const ownershipIds = await ownershipFixtures(db);
   const afterHoursIds = await afterHoursFixtures(db);
+  const { rows: people } = await db.query(
+    `select id from public.users where role = 'worker' order by created_at limit 1`);
+  const personId = people[0]?.id ?? null;
 
   const browser = await chromium.launch({
     // The sandbox ships a pinned Chromium; use it rather than downloading one.
@@ -990,6 +1038,7 @@ async function main() {
     await checkOwnership(page, viewport, ownershipIds);
     await checkAfterHours(page, viewport, afterHoursIds);
     await checkReports(page, viewport);
+    await checkAdministration(page, viewport, personId);
 
     await context.close();
   }

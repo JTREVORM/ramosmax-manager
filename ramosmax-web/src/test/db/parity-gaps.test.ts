@@ -300,3 +300,83 @@ describe('update_service_intake', () => {
     });
   });
 });
+
+/**
+ * READING SOMEBODY'S ACCESS.
+ *
+ * The account screen states what a person holds right now. The helper it reads
+ * through re-checks the caller, because the helper underneath it takes any uuid
+ * and checks nothing — it was only ever called from inside another function
+ * that had already established who was asking.
+ */
+describe('user_access', () => {
+  it('answers with your own access without any permission', async () => {
+    await asAdminDb(async (db) => {
+      await becomeClient(db, SEED.worker);
+      const { rows } = await db.query<{ p: string[] }>(`select app.user_access() as p`);
+      await becomeOwner(db);
+      expect(rows[0].p).toContain('jobs.view.own');
+      expect(rows[0].p).not.toContain('users.view');
+    });
+  });
+
+  it('refuses somebody else to a caller without users.view', async () => {
+    await asAdminDb(async (db) => {
+      const target = await makeUser(db, { role: 'cashier' });
+      await becomeClient(db, SEED.worker);
+      expect(await db.expectError(`select app.user_access($1)`, [target]))
+        .toMatch(/do not have permission/i);
+      await becomeOwner(db);
+    });
+  });
+
+  it('answers somebody else to a caller who may see users', async () => {
+    await asAdminDb(async (db) => {
+      const target = await makeUser(db, { role: 'cashier' });
+      await becomeClient(db, SEED.admin);
+      const { rows } = await db.query<{ p: string[] }>(
+        `select app.user_access($1) as p`, [target]);
+      await becomeOwner(db);
+      expect(rows[0].p).toContain('payments.record');
+    });
+  });
+
+  it('includes a temporary grant while it is live and not after', async () => {
+    await asAdminDb(async (db) => {
+      const target = await makeUser(db, { role: 'worker' });
+      await becomeClient(db, SEED.admin);
+      const { rows: granted } = await db.query<{ id: string }>(
+        `select app.grant_temporary_permission($1, 'expenses.create', null,
+           now() + interval '2 hours', 'Covering the store') as id`, [target]);
+      const before = await db.query<{ p: string[] }>(
+        `select app.user_access($1) as p`, [target]);
+      expect(before.rows[0].p).toContain('expenses.create');
+
+      // Move the window into the past. Nothing sweeps it: the comparison is
+      // made every time the question is asked.
+      await becomeOwner(db);
+      await db.query(
+        `update public.temporary_grants
+            set starts_at = now() - interval '3 hours', expires_at = now() - interval '1 hour'
+          where id = $1`, [granted[0].id]);
+
+      await becomeClient(db, SEED.admin);
+      const after = await db.query<{ p: string[] }>(
+        `select app.user_access($1) as p`, [target]);
+      await becomeOwner(db);
+      expect(after.rows[0].p).not.toContain('expenses.create');
+    });
+  });
+
+  it('is empty for somebody whose access has been turned off', async () => {
+    await asAdminDb(async (db) => {
+      const target = await makeUser(db, { role: 'cashier' });
+      await becomeClient(db, SEED.admin);
+      await db.query(`select app.set_user_active($1, false, 'Left the business')`, [target]);
+      const { rows } = await db.query<{ p: string[] }>(
+        `select app.user_access($1) as p`, [target]);
+      await becomeOwner(db);
+      expect(rows[0].p).toEqual([]);
+    });
+  });
+});
