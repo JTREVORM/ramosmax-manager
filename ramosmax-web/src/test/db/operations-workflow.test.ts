@@ -221,14 +221,15 @@ describe('customer → vehicle → intake → assign → work → ready to invoi
                              'receive_cash_handover', 'resolve_cash_discrepancy')`);
       expect(afterHours).toHaveLength(6);
 
-      // The current boundary: server-side reports and notifications have no
-      // functions yet.
-      const { rows: later } = await db.query<{ n: string }>(`
-        select count(*)::text as n from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      // Reports and notifications have arrived, which completes the schema:
+      // every phase of the reference implementation now has its functions
+      // here, and there is no later boundary left to assert.
+      const { rows: reports } = await db.query<{ proname: string }>(`
+        select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
          where n.nspname = 'app'
-           and (p.proname like '%_report%' or p.proname like '%notification%'
-                or p.proname like '%push_%')`);
-      expect(Number(later[0].n)).toBe(0);
+           and p.proname in ('business_report', 'my_reports', 'notify', 'deliver_events',
+                             'my_notifications', 'register_push_subscription')`);
+      expect(reports).toHaveLength(6);
 
       // The vehicle can start a new job now that this one is finished.
       await becomeClient(db, SEED.cashier);

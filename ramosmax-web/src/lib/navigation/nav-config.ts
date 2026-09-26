@@ -194,6 +194,9 @@ export const NAV_SECTIONS: readonly NavSection[] = [
         icon: 'ChartColumn',
       },
       { href: '/audit', label: 'Audit Logs', anyOf: ['audit.view'], icon: 'ScrollText' },
+      // Everybody has an inbox: notices are about your own work, your own
+      // access and your own pay, so there is no permission to hold for it.
+      { href: '/notifications', label: 'Notices', anyOf: [], icon: 'Bell' },
     ],
   },
   {

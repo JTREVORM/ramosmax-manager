@@ -39,7 +39,7 @@ export interface DataColumn<T> {
 export interface DataViewProps<T> {
   rows: readonly T[];
   columns: readonly DataColumn<T>[];
-  rowKey: (row: T) => string;
+  rowKey: (row: T, index: number) => string;
   /** Wraps each row/card in a link when provided. */
   href?: (row: T) => string;
   caption: string;
@@ -94,7 +94,7 @@ export function DataView<T>({
 
       {/* ---------------- phone: cards ---------------- */}
       <ul className="space-y-2 md:hidden" aria-label={caption}>
-        {rows.map((row) => {
+        {rows.map((row, index) => {
           const body = (
             <Card className="active:bg-surface-muted px-4 py-3">
               <div className="flex items-start justify-between gap-3">
@@ -141,7 +141,7 @@ export function DataView<T>({
           );
 
           return (
-            <li key={rowKey(row)}>
+            <li key={rowKey(row, index)}>
               {href ? (
                 <a href={href(row)} className="block rounded-[var(--radius)]">
                   {body}
@@ -177,9 +177,9 @@ export function DataView<T>({
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
+              {rows.map((row, index) => (
                 <tr
-                  key={rowKey(row)}
+                  key={rowKey(row, index)}
                   className="border-border hover:bg-surface-muted border-b last:border-0"
                 >
                   {tableColumns.map((column) => (

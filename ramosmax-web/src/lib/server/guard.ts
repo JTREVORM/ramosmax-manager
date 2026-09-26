@@ -17,3 +17,14 @@ export async function requireAnyPermission(...anyOf: string[]): Promise<Set<stri
   }
   return granted;
 }
+
+/**
+ * Any signed-in person. Used by the screens everybody has — their own notices,
+ * their own profile — where there is nothing to hold a permission for.
+ *
+ * This is navigation, not security: `proxy.ts` has already turned away anybody
+ * who is not signed in, and every query behind it still runs under RLS.
+ */
+export async function requireSignedIn(): Promise<Set<string>> {
+  return currentPermissions();
+}

@@ -69,6 +69,14 @@ const PURE_HELPERS = [
   'after_hours_grantable()',
   'after_hours_default_grants()',
   'after_hours_context(uuid)',
+  'report_catalogue()',
+  'report_max_days()',
+  'report_max_rows()',
+  'my_reports()',
+  'mutable_categories()',
+  'notification_preferences()',
+  'notification_categories()',
+  'unread_notification_count()',
 ];
 
 /** The command surface: every function a browser may ask for by name. */
@@ -205,6 +213,14 @@ const COMMANDS = [
   'my_after_hours()',
   'after_hours_eligible_staff()',
   'sweep_after_hours()',
+  // reports (final phase)
+  'business_report(text,date,date)',
+  // notifications (final phase)
+  'my_notifications(integer,boolean)',
+  'mark_notification_read(uuid)',
+  'set_notification_preferences(jsonb)',
+  'register_push_subscription(text,text,text,text)',
+  'remove_push_subscription(text)',
 ];
 
 const ALLOWED = new Set([...RLS_HELPERS, ...PURE_HELPERS, ...COMMANDS]);
@@ -294,6 +310,27 @@ describe('no app function is callable by a client unless it is on the allow-list
       'record_payment_custody',
       'record_reversal_custody',
       'require_not_own_handover',
+      'report_money',
+      'report_period',
+      'report_operations',
+      'report_revenue_section',
+      'report_finance',
+      'report_workforce',
+      'report_inventory',
+      'report_ownership',
+      'report_after_hours',
+      'report_daily_money',
+      'report_payment_methods',
+      'report_outstanding',
+      'report_expenses',
+      'report_truncated',
+      'notify',
+      'deliver_events',
+      'pending_push',
+      'record_push',
+      'skip_muted_push',
+      'drop_push_subscription',
+      'push_allowed',
     ]) {
       const found = [...exposed].filter((s) => s.startsWith(`${internal}(`));
       expect(found, `${internal} is callable by a client`).toEqual([]);

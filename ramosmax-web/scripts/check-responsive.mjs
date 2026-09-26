@@ -904,6 +904,58 @@ async function checkAfterHours(page, viewport, fixtures) {
   await page.screenshot({ path: `${OUT}/phaseH-${viewport.name}-handovers.png`, fullPage: true });
 }
 
+
+/**
+ * Reports and notices.
+ *
+ * A report is the widest thing in the product: a table of eleven money
+ * columns has to become something a manager can read on a phone.
+ */
+async function checkReports(page, viewport) {
+  const screens = [
+    ['/reports', 'Reports'],
+    ['/reports?report=financial', 'Reports'],
+    ['/reports?report=revenue', 'Reports'],
+    ['/reports?report=payment_methods', 'Reports'],
+    ['/reports?report=outstanding', 'Reports'],
+    ['/reports?report=expenses', 'Reports'],
+    ['/reports?report=inventory', 'Reports'],
+    ['/reports?report=workforce', 'Reports'],
+    ['/reports?report=shareholders', 'Reports'],
+    ['/reports?report=after_hours', 'Reports'],
+    ['/notifications', 'Notices'],
+    ['/notifications?tab=unread', 'Notices'],
+    ['/notifications?tab=settings', 'Notices'],
+  ];
+
+  for (const [path, title] of screens) {
+    await page.goto(`${BASE}${path}`, { waitUntil: 'domcontentloaded' });
+    const heading = await page.getByRole('heading', { level: 1 }).first().textContent();
+    check(heading.trim() === title, `${path} renders`);
+    check((await pageOverflow(page)) <= 0, `${path} has no horizontal scroll`);
+  }
+
+  // The daily money table is the widest in the product.
+  await page.goto(`${BASE}/reports?report=financial`, { waitUntil: 'domcontentloaded' });
+  const table = page.getByRole('table').first();
+  const list = page.getByRole('list', { name: 'By day' }).first();
+  if (viewport.width >= 768) {
+    check(await table.isVisible(), 'the daily money table is a table on a wide screen');
+    check(!(await list.isVisible()), 'its card list is hidden on a wide screen');
+  } else {
+    check(await list.isVisible(), 'the daily money table becomes cards on a phone');
+    check(!(await table.isVisible()), 'its table is hidden on a phone');
+  }
+  await page.screenshot({ path: `${OUT}/reports-${viewport.name}-financial.png`, fullPage: true });
+
+  // The export is a link, not a figure the browser worked out.
+  const exportLink = page.getByRole('link', { name: 'Export CSV' });
+  check((await exportLink.count()) > 0, 'the report offers a CSV export');
+
+  await page.goto(`${BASE}/notifications?tab=settings`, { waitUntil: 'domcontentloaded' });
+  await page.screenshot({ path: `${OUT}/reports-${viewport.name}-notices.png`, fullPage: true });
+}
+
 async function main() {
   mkdirSync(OUT, { recursive: true });
 
@@ -937,6 +989,7 @@ async function main() {
     await checkPhaseF(page, viewport, workforceIds);
     await checkOwnership(page, viewport, ownershipIds);
     await checkAfterHours(page, viewport, afterHoursIds);
+    await checkReports(page, viewport);
 
     await context.close();
   }

@@ -19,3 +19,20 @@ Notes that matter in this repository, beyond the Next.js guidance above:
   and `cookies()`, `headers()`, `params` and `searchParams` are async-only.
 - The architecture rules in `README.md` preserve financial controls. Read them
   before adding a mutation, a cache or an offline behaviour.
+
+## Environment
+
+`.env.example` documents every variable. Three groups matter:
+
+- **Supabase** (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
+  `SUPABASE_SERVICE_ROLE_KEY`). With no URL set, the app talks to
+  `DATABASE_URL` directly and calls the same functions, which is how the
+  development database works without a hosted project.
+- **Web Push** (`NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`,
+  `VAPID_SUBJECT`). Optional: without them the in-app inbox still works.
+- **Notification delivery** (`NOTIFICATION_CRON_SECRET`). Required by
+  `POST /api/notifications/deliver`, which a scheduler calls.
+
+The service-role key bypasses RLS. It is used only by `serviceDb()` in
+`src/lib/server/db.ts`, for the notification delivery run, and never anywhere
+a browser can reach.
