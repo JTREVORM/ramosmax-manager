@@ -32,6 +32,10 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...except the template, which documents every variable and holds no value.
+# Without this it is ignored, and the one file that says what to set never
+# reaches anybody who clones the repository.
+!.env.example
 
 # vercel
 .vercel
