@@ -5,7 +5,7 @@ in this repository has so far been proved against a **local PostgreSQL 16
 database** that emulates the Supabase platform (`supabase/local/00_platform_bootstrap.sql`
 creates the `auth`, `app` and role scaffolding that Supabase provides).
 
-That is a strong proof of the **business rules** — 1,608 database tests, every
+That is a strong proof of the **business rules** — 1,647 database tests, every
 permission, every financial invariant, every privacy boundary. It is **not** a
 proof of the **platform integration**: PostgREST's argument handling, GoTrue's
 sessions, `@supabase/ssr` cookies, PgBouncer's statement behaviour and the
@@ -89,7 +89,37 @@ Until that script has been run against a real project and passed, **no part of
 this system may be described as production-ready**, and the final report says
 so in those words.
 
-## 4. What I will NOT ask you for
+## 4. Storage buckets
+
+Evidence — a deposit slip, a reconciliation statement, an expense receipt, a
+supplier invoice, a sick note, a photograph of a loss, a staff profile photo —
+is the one part of the reference that needs a service the local database
+cannot emulate.
+
+The database half is done and tested: `attachment_path` on every record that
+takes one, `app.attach_evidence` and `app.set_profile_photo` validating the
+same path shapes the reference validates, the same permission to attach, and
+the same refusal to replace or remove one (`evidence.test.ts`). What is
+missing is the bucket and the upload itself.
+
+Three buckets, **all private**, mirroring `firebase/storage.rules`:
+
+| Bucket | Paths | Read | Write |
+|---|---|---|---|
+| `finance_uploads` | `<kind>/<uploadId>/<file>`, kind one of `deposits`, `reconciliations`, `expenses`, `purchases` | `finance.view` | `finance.deposit` / `finance.reconcile` / `expenses.create` / `inventory.purchase.create` respectively |
+| `payroll_uploads` | `<kind>/<uploadId>/<file>`, kind one of `attendance`, `losses`, `payroll` | `payroll.view` | `attendance.record` / `losses.create` |
+| `staff` | `<staffId>/profile/<file>` | any signed-in, active account | the person themselves, or `users.edit` |
+
+None of the three may allow update or delete to anybody: evidence is never
+replaced and never removed, which is what `allow update, delete: if false`
+says in the reference.
+
+Once the buckets exist, the upload is one step in each form: put the file,
+then call `app.attach_evidence` with the path it landed on. Until then the
+screens do not offer an upload, because there is nowhere to put the file —
+this is stated in `docs/PARITY.md` §11 rather than left to be discovered.
+
+## 5. What I will NOT ask you for
 
 - Your Supabase account password.
 - Your production project's keys.

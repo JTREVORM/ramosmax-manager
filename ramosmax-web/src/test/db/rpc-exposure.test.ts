@@ -92,6 +92,9 @@ const COMMANDS = [
   'revoke_temporary_permission(uuid,text)',
   // Reads its own caller: your own access always, somebody else's with users.view.
   'user_access(uuid)',
+  // Evidence: the path of a file already uploaded, never the file itself.
+  'attach_evidence(text,uuid,text)',
+  'set_profile_photo(uuid,text)',
   // operations (Phase C)
   'create_customer(text,text,text,text,text,text)',
   'update_customer(uuid,text,text,text,text,text,text)',
