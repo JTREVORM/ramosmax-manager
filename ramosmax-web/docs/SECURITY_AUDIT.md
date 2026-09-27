@@ -29,7 +29,7 @@ the port uses both:
 | With RLS not forced | **0** |
 | INSERT/UPDATE/DELETE/TRUNCATE grants to `authenticated` | **0** |
 | Any grant at all to `anon` | **0** |
-| `SECURITY DEFINER` functions | 253 |
+| `SECURITY DEFINER` functions | 254 |
 | …without a pinned `search_path` | **0** |
 
 A pinned `search_path` on every definer function closes the classic
@@ -164,6 +164,58 @@ financial mutation is queued offline, ever.
 | Password reset | `app.prepare_password_reset` ends every session the person has open; the password itself is never written to the audit trail |
 | Push subscriptions | `public.push_subscriptions` has no client grant at all |
 | A person's own sessions | `users.sessions_valid_from` invalidates every issued session at once — used by deactivation and by a phone-number change |
+
+## 8b — Found on the hosted project, and fixed
+
+The figures above were measured against the local database. Measuring the same
+things against the hosted development project found one real hole that the
+local database could not have shown, because the local database was more
+restrictive than the platform it was emulating.
+
+**A hosted Supabase project ships with**
+
+```sql
+alter default privileges for role postgres in schema public
+  grant all on tables to postgres, anon, authenticated, service_role;
+```
+
+and the same again for `supabase_admin`, and for sequences and functions. A
+VIEW counts as a table here. Every schema migration revokes everything on its
+new tables before granting back SELECT; the RLS migrations, which create the
+six views, only ever granted SELECT — there was nothing to revoke locally. So
+all six views were born on the hosted project with INSERT, UPDATE, DELETE and
+TRUNCATE for `anon` and `authenticated`, and nothing took them away.
+
+`payment_accounts` and `share_register` are owner-run views and both are
+auto-updatable. PostgreSQL checks the base table's privileges against the VIEW
+OWNER for such a view, the owner is `postgres`, and `postgres` on Supabase
+holds `BYPASSRLS`. An INSERT does not evaluate the view's WHERE clause, so the
+permission predicate in the view body is never consulted on the way in.
+
+Reproduced on a local database configured with the platform's own default
+privileges: as `anon` — the key that ships in every browser bundle —
+`insert into public.payment_accounts …` wrote a row into `financial_accounts`,
+and the same connection could not then read that table back. SELECT, UPDATE
+and DELETE were refused, but only because evaluating the predicate needs
+`app.has_either_permission`, which `anon` cannot execute. That is an accident,
+not a control.
+
+`0056_view_privileges.sql` takes every privilege on every view away from `anon`
+and `authenticated`, grants back SELECT to `authenticated` alone, restores the
+two intended column-scoped grants explicitly, and rewrites the default
+privileges so nothing created in `public` later can inherit any of it again.
+`supabase/local/00_platform_bootstrap.sql` now reproduces the platform's
+default privileges, so the two tests in `schema.test.ts` that assert
+default-deny are no longer vacuous — without `0056` they fail.
+
+**Also reported by Supabase's own linter, and accepted:**
+
+| Finding | Assessment |
+|---|---|
+| `security_definer_view` on the three owner-run views | By design, and documented in §2. Each carries its permission predicate in its own body. With the write grants gone, `authenticated` may only read them. |
+| `rls_enabled_no_policy` on `app.login_throttle`, `app.notification_types`, `app.request_keys`, `public.push_subscriptions` | By design: RLS enabled and forced with no policy is default-deny to every client role. Only `SECURITY DEFINER` functions reach these. |
+| `function_search_path_mutable` on 103 functions | All 254 `SECURITY DEFINER` functions have a pinned `search_path`; the 103 are `SECURITY INVOKER` helpers, which run as the caller and so cannot escalate. Worth pinning as hardening; not a privilege boundary. |
+| Leaked-password protection disabled | A dashboard setting, worth turning on. |
 
 ## 9 — What this audit does not cover
 

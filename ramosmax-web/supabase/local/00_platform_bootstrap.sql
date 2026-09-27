@@ -48,6 +48,31 @@ grant anon, authenticated, service_role to authenticator;
 grant usage on schema public to anon, authenticated, service_role;
 
 -- ---------------------------------------------------------------------------
+-- The default privileges a hosted project ships with
+-- ---------------------------------------------------------------------------
+-- This is the uncomfortable part of the platform, and leaving it out of the
+-- emulation is what let a real hole through: a hosted Supabase project runs
+--
+--   alter default privileges for role postgres in schema public
+--     grant all on tables to postgres, anon, authenticated, service_role;
+--
+-- and the same for sequences and functions, and again for `supabase_admin`.
+-- Every object created in `public` is therefore born reachable by `anon`
+-- unless something takes that away, and a VIEW counts as a table.
+--
+-- Without this line the local database was permissive in the opposite
+-- direction to the real one, so 1,652 tests could all pass while six views on
+-- the hosted project carried INSERT for the anon key. Reproducing the
+-- platform's generosity here is what makes those tests mean something:
+-- `0056` is what takes it away again, and the suite now proves it did.
+alter default privileges for role postgres in schema public
+  grant all on tables to anon, authenticated, service_role;
+alter default privileges for role postgres in schema public
+  grant all on sequences to anon, authenticated, service_role;
+alter default privileges for role postgres in schema public
+  grant execute on functions to anon, authenticated, service_role;
+
+-- ---------------------------------------------------------------------------
 -- auth schema
 -- ---------------------------------------------------------------------------
 
