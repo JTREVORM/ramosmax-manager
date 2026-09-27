@@ -19,7 +19,40 @@
 -- Supabase service concern and is tested separately.
 -- ===========================================================================
 
-create extension if not exists pgcrypto;
+-- ---------------------------------------------------------------------------
+-- pgcrypto, where the platform actually puts it
+-- ---------------------------------------------------------------------------
+-- A hosted Supabase project installs its extensions into a schema called
+-- `extensions`, NOT into `public`, and gives the `postgres` role a search_path
+-- of `"$user", public, extensions` so ordinary SQL still finds them.
+--
+-- A SECURITY DEFINER function with a pinned `search_path = app, public,
+-- pg_temp` does NOT: a pinned path overrides the role's. So `digest()` is
+-- reachable from a migration and from a script, and unreachable from inside
+-- the functions that do the work — which is how the first hosted sign-in
+-- returned 500 with `function digest(text, unknown) does not exist` while
+-- every migration had applied cleanly and the first administrator had been
+-- created without complaint.
+--
+-- Installing it into `public` here, as this file used to, made the local
+-- database the one place where that could not happen. It is installed where
+-- the platform installs it, and the session path is set to match, so the
+-- pinned-path functions are exercised against the real resolution rules.
+create schema if not exists extensions;
+create extension if not exists pgcrypto with schema extensions;
+grant usage on schema extensions to anon, authenticated, service_role;
+
+-- For every FUTURE connection (tests, the application, the e2e scripts), as
+-- the `postgres` role has on a hosted project...
+do $$
+begin
+  execute format('alter database %I set search_path = "$user", public, extensions',
+                 current_database());
+end;
+$$;
+-- ...and for this one, so the migrations that follow it in this session see
+-- what a migration run against the hosted project sees.
+set search_path = "$user", public, extensions;
 
 -- ---------------------------------------------------------------------------
 -- Platform roles (as Supabase creates them)
