@@ -3,8 +3,8 @@
 import { revalidatePath } from 'next/cache';
 import { callRpc } from './operations';
 import { authProvider } from './auth-provider';
-import { backend, localPool, serviceDb } from './db';
-import { currentPermissions, currentUser } from './auth-service';
+import { backend, localPool, serverRpcAsUser, serviceDb } from './db';
+import { currentPermissions, currentUser, endOtherSessions } from './auth-service';
 import type { ActionResult } from './operations-actions';
 
 /**
@@ -17,6 +17,22 @@ import type { ActionResult } from './operations-actions';
  * privileges — and the functions they call re-check the permission anyway, so
  * a mistake here is caught by the database rather than trusted.
  */
+
+/**
+ * The signed-in caller, for the server-only functions.
+ *
+ * `create_user`, `prepare_password_reset` and `end_sessions` are revoked from
+ * `authenticated` on purpose — each pairs with a credential-store side effect a
+ * browser must not be able to start. They are therefore called through
+ * `serverRpcAsUser`, which keeps the owner's EXECUTE rights while still running
+ * under this person's claim, so the permission check inside each function and
+ * the audit attribution are unchanged.
+ */
+async function callerId(): Promise<string> {
+  const me = await currentUser();
+  if (!me) throw new Error('Your session has ended. Please sign in again.');
+  return me.id;
+}
 
 async function run(fn: string, params: unknown[], revalidate: string[]): Promise<ActionResult> {
   try {
@@ -146,8 +162,8 @@ export async function createUserAction(form: FormData): Promise<ActionResult> {
   }
 
   try {
-    await callRpc('create_user', [authUserId, phone, fullName, role, staffId,
-      text(form, 'reason')]);
+    await serverRpcAsUser(await callerId(), 'create_user',
+      [authUserId, phone, fullName, role, staffId, text(form, 'reason')]);
   } catch (e) {
     // Leave no credential behind that no profile points at.
     await removeIdentity(authUserId);
@@ -173,11 +189,15 @@ export async function createUserAction(form: FormData): Promise<ActionResult> {
 export async function resetUserPasswordAction(form: FormData): Promise<ActionResult> {
   const id = String(form.get('user_id'));
   try {
-    const rows = await callRpc<Record<string, unknown>>('prepare_password_reset',
-      [id, text(form, 'reason')]);
+    const rows = await serverRpcAsUser<Record<string, unknown>>(
+      await callerId(), 'prepare_password_reset', [id, text(form, 'reason')]);
     const password = String(Object.values(rows[0])[0]);
     await authProvider().setPassword(id, password);
-    await authProvider().revokeSessions(id);
+    // `prepare_password_reset` already stamped `sessions_valid_from`, so this
+    // is belt and braces rather than the only thing ending their sessions —
+    // and it is a stamp, not a call to a credential store that would want a
+    // JWT where it is being handed a user id.
+    await endOtherSessions(id);
     revalidatePath(`/users/${id}`);
     return { ok: true, id: password };
   } catch (e) {

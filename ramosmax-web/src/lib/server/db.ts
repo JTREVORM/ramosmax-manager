@@ -118,6 +118,7 @@ export async function queryAsUser<T = Record<string, unknown>>(
   userId: string,
   sql: string,
   params: unknown[] = [],
+  options: { keepOwnerRights?: boolean } = {},
 ): Promise<T[]> {
   const pooled = (await localPool()) as unknown as {
     connect(): Promise<{
@@ -135,7 +136,17 @@ export async function queryAsUser<T = Record<string, unknown>>(
     await client.query(`select set_config('request.jwt.claims', $1, true)`, [
       JSON.stringify({ sub: userId, role: 'authenticated' }),
     ]);
-    await client.query('set local role authenticated');
+    // A few functions are deliberately NOT granted to `authenticated`,
+    // because they pair with a credential-store side effect a browser must
+    // never be able to start on its own: `create_user`,
+    // `prepare_password_reset`, `end_sessions`. The server calls those with
+    // the owner's rights — but still under the caller's CLAIM, set above, so
+    // `auth.uid()` is the real person and every permission check inside the
+    // function applies exactly as it would otherwise. The only thing skipped
+    // is the EXECUTE grant the browser is denied on purpose.
+    if (!options.keepOwnerRights) {
+      await client.query('set local role authenticated');
+    }
     const { rows } = await client.query(sql, params as never);
     await client.query('commit');
     return rows as T[];
@@ -159,6 +170,29 @@ export async function rpcAsUser<T = Record<string, unknown>>(
 ): Promise<T[]> {
   const placeholders = params.map((_, i) => `$${i + 1}`).join(', ');
   return queryAsUser<T>(userId, `select * from app.${fn}(${placeholders})`, params);
+}
+
+/**
+ * Calls a SERVER-ONLY function on behalf of the signed-in user.
+ *
+ * Same claim, same permission checks, same audit attribution as `rpcAsUser` —
+ * the one difference is that the connection keeps the owner's rights instead
+ * of dropping to `authenticated`, because these functions are deliberately not
+ * granted to a browser session.
+ *
+ * Use it ONLY for the handful of functions that pair with a credential-store
+ * side effect and are revoked from `authenticated` for that reason. Reaching
+ * for it anywhere else would quietly hand a page the owner's rights.
+ */
+export async function serverRpcAsUser<T = Record<string, unknown>>(
+  userId: string,
+  fn: string,
+  params: unknown[] = [],
+): Promise<T[]> {
+  const placeholders = params.map((_, i) => `$${i + 1}`).join(', ');
+  return queryAsUser<T>(userId, `select * from app.${fn}(${placeholders})`, params, {
+    keepOwnerRights: true,
+  });
 }
 
 /**

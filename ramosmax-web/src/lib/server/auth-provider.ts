@@ -19,8 +19,6 @@ export interface AuthProvider {
   verifyPassword(email: string, password: string): Promise<string | null>;
   /** Replaces a user's password. */
   setPassword(userId: string, password: string): Promise<void>;
-  /** Ends every other session for the user (after a password change). */
-  revokeSessions(userId: string): Promise<void>;
   /** Creates a credential record with a hidden identity. Returns the user id. */
   createIdentity(email: string, password: string): Promise<string>;
 }
@@ -47,16 +45,29 @@ const supabaseProvider: AuthProvider = {
     );
     const { data, error } = await client.auth.signInWithPassword({ email, password });
     if (error || !data.user) return null;
+
+    // Verifying a password issues a GoTrue session, whether or not anybody
+    // wants one. RamosMAX does not: the browser is never given a Supabase
+    // token, and the session it carries is this application's own signed
+    // cookie. So the session just created is handed straight back, with the
+    // access token it came with — which is what `admin.signOut` has always
+    // wanted, and what it never used to be given.
+    //
+    // `local` scope: this ends the throwaway session and nothing else.
+    // Verifying somebody's password must not sign them out elsewhere.
+    if (data.session?.access_token) {
+      await adminClient().auth.admin
+        .signOut(data.session.access_token, 'local')
+        .catch(() => {
+          // A session left behind is untidy, not dangerous — nothing accepts a
+          // Supabase token here. Never fail a sign-in over it.
+        });
+    }
     return data.user.id;
   },
 
   async setPassword(userId, password) {
     const { error } = await adminClient().auth.admin.updateUserById(userId, { password });
-    if (error) throw new Error(error.message);
-  },
-
-  async revokeSessions(userId) {
-    const { error } = await adminClient().auth.admin.signOut(userId, 'global');
     if (error) throw new Error(error.message);
   },
 
@@ -98,12 +109,6 @@ const localProvider: AuthProvider = {
         where id = $1`,
       [userId, password],
     );
-  },
-
-  async revokeSessions() {
-    // Local sessions are stateless signed cookies carrying an issued-at stamp;
-    // `session.ts` rejects any cookie issued before the user's
-    // password_changed_at, which is what makes revocation effective.
   },
 
   async createIdentity(email, password) {
